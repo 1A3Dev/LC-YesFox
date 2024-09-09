@@ -26,7 +26,7 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <ThunderstoreBuildCopyPath Include="$(ProjectDir)assets/bundles/bush_wolf" Destination="/" />
+        <ThunderstoreBuildCopyPath Include="$(ProjectDir)assets/bundles" Destination="BepInEx/plugins/$(ProjectName)" />
         <ThunderstoreBuildCopyPath Include="$(ProjectDir)../LICENSE" Destination="/" />
         <ThunderstoreBuildCopyPath Include="$(ProjectDir)../CHANGELOG.md" Destination="/" />
         <ThunderstorePublishCommunity Include="lethal-company" CategorySlugs="mods;misc" />
