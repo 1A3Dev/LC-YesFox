@@ -77,8 +77,8 @@ jobs:
         run: |
           dotnet tool restore
 
-      # - name: Publish to Thunderstore
-      #   env:
-      #     TCLI_AUTH_TOKEN: ${{ secrets.THUNDERSTORE_API_TOKEN }}
-      #   run: |
-      #     dotnet build -c Release -f netstandard2.1 -target:ThunderstorePublish
+      - name: Publish to Thunderstore
+        env:
+          TCLI_AUTH_TOKEN: ${{ secrets.THUNDERSTORE_API_TOKEN }}
+        run: |
+          dotnet build -c Release -f netstandard2.1 -target:ThunderstorePublish
