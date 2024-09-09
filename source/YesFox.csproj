@@ -1,0 +1,62 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <AssemblyName>YesFox</AssemblyName>
+        <TargetFramework>netstandard2.1</TargetFramework>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <RunPostBuildEvent>OnBuildSuccess</RunPostBuildEvent>
+    </PropertyGroup>
+    
+    <PropertyGroup>
+        <IsThunderstorePackable>true</IsThunderstorePackable>
+        <ThunderstoreName>YesFox</ThunderstoreName>
+        <ThunderstoreDescription>Re-enables vain shroud spawning and the kidnapper fox</ThunderstoreDescription>
+        <ThunderstoreIconPath>$(ProjectDir)assets/icons/icon.png</ThunderstoreIconPath>
+        <HasBepInPlugin>true</HasBepInPlugin>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ThunderstoreBuildCopyPath Include="$(TargetPath)" Destination="BepInEx/plugins/$(ProjectName)/" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="BepInEx.AssemblyPublicizer.MSBuild" Version="0.4.2">
+          <PrivateAssets>all</PrivateAssets>
+          <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
+        </PackageReference>
+        <PackageReference Include="BepInEx.Core" Version="5.*" />
+        <PackageReference Include="UnityEngine.Modules" Version="2023.2.15" IncludeAssets="compile" />
+        <PackageReference Include="TeamBMX.LobbyCompatibility" Version="1.*" PrivateAssets="all" />
+    </ItemGroup>
+
+    <ItemGroup Condition="$(CI) != 'true'">
+      <Reference Include="Assembly-CSharp" Publicize="true">
+        <HintPath>$(LethalCompanyDir)Lethal Company_Data/Managed/Assembly-CSharp.dll</HintPath>
+      </Reference>
+      <Reference Include="Unity.Netcode.Runtime">
+        <HintPath>$(LethalCompanyDir)Lethal Company_Data/Managed/Unity.Netcode.Runtime.dll</HintPath>
+      </Reference>
+      <Reference Include="UnityEngine">
+        <HintPath>$(LethalCompanyDir)Lethal Company_Data/Managed/UnityEngine.dll</HintPath>
+      </Reference>
+      <Reference Include="UnityEngine.CoreModule">
+        <HintPath>$(LethalCompanyDir)Lethal Company_Data/Managed/UnityEngine.CoreModule.dll</HintPath>
+      </Reference>
+    </ItemGroup>
+
+    <ItemGroup Condition="$(CI) == 'true'">
+        <PackageReference Include="LethalCompany.GameLibs.Steam" Version="*-*" />
+    </ItemGroup>
+
+    <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+        <DebugType>embedded</DebugType>
+    </PropertyGroup>
+
+    <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+        <DebugType>embedded</DebugType>
+    </PropertyGroup>
+
+    <PropertyGroup>
+        <PathMap>$([System.IO.Path]::GetFullPath('$(MSBuildThisFileDirectory)'))=./</PathMap>
+    </PropertyGroup>
+</Project>

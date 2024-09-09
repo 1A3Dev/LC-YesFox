@@ -1,0 +1,10 @@
+{
+  "name": "YesFox",
+  "version_number": "1.0.6",
+  "website_url": "",
+  "description": "[v64] Re-enables vain shroud spawning and the kidnapper fox",
+  "dependencies": [
+    "BepInEx-BepInExPack-5.4.2100",
+    "ButteryStancakes-WeedKillerFixes-1.1.0"
+  ]
+}
