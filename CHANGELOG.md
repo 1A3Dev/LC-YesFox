@@ -1,3 +1,8 @@
+### 1.0.7
+
+- Added various config options
+- Fixed multiple foxes being able to spawn
+
 ### 1.0.6
 
 - Small correction for the changelog

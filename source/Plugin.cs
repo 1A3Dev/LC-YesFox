@@ -3,6 +3,7 @@ using BepInEx.Bootstrap;
 using BepInEx.Configuration;
 using BepInEx.Logging;
 using HarmonyLib;
+using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -155,7 +156,8 @@ namespace YesFox
         public static List<SpawnableEnemyWithRarity> WeedEnemies = new List<SpawnableEnemyWithRarity>();
 
         [HarmonyPatch(typeof(StartOfRound), "Start")]
-        [HarmonyPostfix]
+        [HarmonyPrefix]
+        [HarmonyPriority(Priority.First)]
         private static void StartOfRound_Start()
         {
             GenerateWeedEnemiesList();
@@ -165,49 +167,61 @@ namespace YesFox
         {
             WeedEnemies.Clear();
 
-            string[] enemyNames = ["BushWolf"];
-            enemyNames = enemyNames.Concat(enemyNames.Select(x => $"{x}Addon")).ToArray();
-            EnemyType[] enemyTypes = Resources.FindObjectsOfTypeAll<EnemyType>().Where(x => enemyNames.Contains(x.name)).ToArray();
-            foreach (EnemyType enemyType in enemyTypes)
+            try
             {
-                if (enemyType.name.EndsWith("Addon")) continue;
-
-                if (enemyType.name == "BushWolf")
+                EnemyType bushWolfTypeOrig = Resources.FindObjectsOfTypeAll<EnemyType>().FirstOrDefault(x => x.name == "BushWolf" && x.enemyPrefab != Plugin.BushWolfAddonPrefab);
+                EnemyType bushWolfTypeAddon = Resources.FindObjectsOfTypeAll<EnemyType>().FirstOrDefault(x => x.name == "BushWolf" && x.enemyPrefab == Plugin.BushWolfAddonPrefab);
+                if (bushWolfTypeOrig != bushWolfTypeAddon)
                 {
-                    string addonName = $"{enemyType.name}Addon";
-                    int totalDuplicates = enemyTypes.Count(x => x.name == enemyType.name || x.name == addonName);
-                    bool addonExists = enemyTypes.Any(x => x.name == addonName);
-                    if (enemyType.enemyPrefab == Plugin.BushWolfAddonPrefab && !addonExists && totalDuplicates > 1)
+                    if (bushWolfTypeOrig == null && bushWolfTypeAddon != null)
                     {
-                        Plugin.logSource.LogInfo($"Renamed EnemyType: {enemyType.name} > {addonName}");
-                        enemyType.name = addonName;
-                        continue;
+                        bushWolfTypeOrig = bushWolfTypeAddon;
+                        bushWolfTypeAddon = null;
+                        Plugin.logSource.LogInfo($"[GenerateWeedEnemiesList] BushWolf: Replacing original ref with addon: {bushWolfTypeOrig}");
                     }
 
-                    if (GameNetworkManager.Instance.gameVersionNum >= 64)
+                    if (bushWolfTypeOrig != null)
                     {
-                        SkinnedMeshRenderer[] renderersOrig = enemyType.enemyPrefab?.GetComponentsInChildren<SkinnedMeshRenderer>();
-                        SkinnedMeshRenderer[] renderersNew = Plugin.BushWolfAddonPrefab?.GetComponentsInChildren<SkinnedMeshRenderer>();
-                        foreach (SkinnedMeshRenderer renderer in renderersNew)
+                        if (bushWolfTypeAddon != null)
                         {
-                            renderer.material = renderersOrig[0].material;
-                            renderer.materials = renderersOrig[0].materials;
+                            if (bushWolfTypeAddon.enemyPrefab == Plugin.BushWolfAddonPrefab)
+                            {
+                                Plugin.logSource.LogInfo($"[GenerateWeedEnemiesList] BushWolf: Renamed addon EnemyType name");
+                                bushWolfTypeAddon.name = "BushWolfAddon";
+                            }
+
+                            if (GameNetworkManager.Instance.gameVersionNum >= 64)
+                            {
+                                SkinnedMeshRenderer[] renderersOrig = bushWolfTypeOrig.enemyPrefab?.GetComponentsInChildren<SkinnedMeshRenderer>();
+                                SkinnedMeshRenderer[] renderersNew = bushWolfTypeAddon.enemyPrefab?.GetComponentsInChildren<SkinnedMeshRenderer>();
+                                foreach (SkinnedMeshRenderer renderer in renderersNew)
+                                {
+                                    renderer.material = renderersOrig[0].material;
+                                    renderer.materials = renderersOrig[0].materials;
+                                }
+
+                                bushWolfTypeOrig.enemyPrefab = bushWolfTypeAddon.enemyPrefab;
+                                Plugin.logSource.LogInfo("[GenerateWeedEnemiesList] BushWolf: Replaced original EnemyType prefab");
+                            }
+
+                            if (bushWolfTypeAddon.enemyPrefab?.gameObject?.GetComponent<EnemyAI>())
+                            {
+                                bushWolfTypeAddon.enemyPrefab.gameObject.GetComponent<EnemyAI>().enemyType = bushWolfTypeOrig;
+                                Plugin.logSource.LogInfo("[GenerateWeedEnemiesList] BushWolf: Replaced addon EnemyAI enemyType");
+                            }
                         }
-                        enemyType.enemyPrefab = Plugin.BushWolfAddonPrefab;
-                        Plugin.logSource.LogInfo("Replaced Bush Wolf Prefab");
+
+                        WeedEnemies.Add(new SpawnableEnemyWithRarity()
+                        {
+                            enemyType = bushWolfTypeOrig,
+                            rarity = 100,
+                        });
                     }
                 }
-
-                if (Plugin.BushWolfAddonPrefab && Plugin.BushWolfAddonPrefab.gameObject && Plugin.BushWolfAddonPrefab.gameObject.GetComponent<EnemyAI>())
-                {
-                    Plugin.BushWolfAddonPrefab.gameObject.GetComponent<EnemyAI>().enemyType = enemyType;
-                }
-
-                WeedEnemies.Add(new SpawnableEnemyWithRarity()
-                {
-                    enemyType = enemyType,
-                    rarity = 100,
-                });
+            }
+            catch (Exception e)
+            {
+                Plugin.logSource.LogError(e);
             }
         }
 
