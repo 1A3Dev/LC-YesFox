@@ -166,13 +166,13 @@ namespace YesFox
             EnemyType[] enemyTypes = Resources.FindObjectsOfTypeAll<EnemyType>().Where(x => x.name == "BushWolf").ToArray();
             foreach (EnemyType enemyType in enemyTypes)
             {
-                if (enemyType.name == "BushWolf" && enemyType.enemyPrefab == Plugin.BushWolfPrefab)
-                {
-                    continue;
-                }
-
                 if (enemyType.name == "BushWolf")
                 {
+                    if (enemyType.enemyPrefab == Plugin.BushWolfPrefab)
+                    {
+                        continue;
+                    }
+
                     if (GameNetworkManager.Instance.gameVersionNum >= 64)
                     {
                         SkinnedMeshRenderer[] renderersOrig = enemyType.enemyPrefab?.GetComponentsInChildren<SkinnedMeshRenderer>();
