@@ -25,7 +25,7 @@ namespace YesFox
         internal static ManualLogSource logSource;
 
         internal static List<GameObject> _networkPrefabs = new List<GameObject>();
-        public static GameObject BushWolfPrefab { get; internal set; }
+        public static GameObject BushWolfAddonPrefab { get; internal set; }
 
         internal static ConfigEntry<bool> Shroud_AllMoons;
         internal static ConfigEntry<float> Shroud_SpawnChance_SameMoon;
@@ -47,11 +47,11 @@ namespace YesFox
                 logSource.LogError("[AssetBundle] Failed to load asset bundle: bush_wolf");
                 return;
             }
-            BushWolfPrefab = BushWolfBundle.LoadAsset<GameObject>("Assets/LethalCompany/Game/Prefabs/EnemyAI/BushWolfEnemy.prefab");
-            if (BushWolfPrefab != null)
+            BushWolfAddonPrefab = BushWolfBundle.LoadAsset<GameObject>("Assets/LethalCompany/Game/Prefabs/EnemyAI/BushWolfEnemy.prefab");
+            if (BushWolfAddonPrefab != null)
             {
-                if (!_networkPrefabs.Contains(BushWolfPrefab))
-                    _networkPrefabs.Add(BushWolfPrefab);
+                if (!_networkPrefabs.Contains(BushWolfAddonPrefab))
+                    _networkPrefabs.Add(BushWolfAddonPrefab);
                 logSource.LogInfo("[AssetBundle] Successfully loaded prefab: BushWolfEnemy");
             }
             else
@@ -110,6 +110,7 @@ namespace YesFox
             {
                 if (i == 3 || (!__instance.levels[i].canSpawnMold && !Plugin.Shroud_AllMoons.Value))
                 {
+                    __instance.levels[i].moldSpreadIterations = 0;
                     continue;
                 }
 
@@ -155,40 +156,36 @@ namespace YesFox
         [HarmonyPostfix]
         private static void StartOfRound_Start()
         {
-            WeedEnemies.Clear();
             GenerateWeedEnemiesList();
         }
 
         public static void GenerateWeedEnemiesList()
         {
-            if (WeedEnemies.Count > 0) return;
+            WeedEnemies.Clear();
 
             EnemyType[] enemyTypes = Resources.FindObjectsOfTypeAll<EnemyType>().Where(x => x.name == "BushWolf").ToArray();
             foreach (EnemyType enemyType in enemyTypes)
             {
                 if (enemyType.name == "BushWolf")
                 {
-                    if (enemyType.enemyPrefab == Plugin.BushWolfPrefab && !Resources.FindObjectsOfTypeAll<EnemyType>().Any(x => x.name == $"{enemyType.name}Addon"))
+                    if (enemyType.enemyPrefab == Plugin.BushWolfAddonPrefab && !Resources.FindObjectsOfTypeAll<EnemyType>().Any(x => x.name == $"{enemyType.name}Addon"))
                     {
                         enemyType.name = "BushWolfAddon";
+                        Plugin.logSource.LogInfo("Renamed Addon Bush Wolf EnemyType");
                         continue;
                     }
 
                     if (GameNetworkManager.Instance.gameVersionNum >= 64)
                     {
                         SkinnedMeshRenderer[] renderersOrig = enemyType.enemyPrefab?.GetComponentsInChildren<SkinnedMeshRenderer>();
-                        SkinnedMeshRenderer[] renderersNew = Plugin.BushWolfPrefab?.GetComponentsInChildren<SkinnedMeshRenderer>();
+                        SkinnedMeshRenderer[] renderersNew = Plugin.BushWolfAddonPrefab?.GetComponentsInChildren<SkinnedMeshRenderer>();
                         foreach (SkinnedMeshRenderer renderer in renderersNew)
                         {
                             renderer.material = renderersOrig[0].material;
                             renderer.materials = renderersOrig[0].materials;
                         }
-                        enemyType.enemyPrefab = Plugin.BushWolfPrefab;
+                        enemyType.enemyPrefab = Plugin.BushWolfAddonPrefab;
                         Plugin.logSource.LogInfo("Replaced Bush Wolf Prefab");
-                    }
-                    else
-                    {
-                        Plugin.BushWolfPrefab = enemyType.enemyPrefab;
                     }
                 }
 
