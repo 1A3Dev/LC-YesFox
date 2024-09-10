@@ -177,7 +177,6 @@ namespace YesFox
                     {
                         bushWolfTypeOrig = bushWolfTypeAddon;
                         bushWolfTypeAddon = null;
-                        Plugin.logSource.LogInfo($"[GenerateWeedEnemiesList] BushWolf: Replacing original ref with addon: {bushWolfTypeOrig}");
                     }
 
                     if (bushWolfTypeOrig != null)
@@ -188,6 +187,12 @@ namespace YesFox
                             {
                                 Plugin.logSource.LogInfo($"[GenerateWeedEnemiesList] BushWolf: Renamed addon EnemyType name");
                                 bushWolfTypeAddon.name = "BushWolfAddon";
+                            }
+
+                            if (bushWolfTypeAddon.enemyPrefab?.gameObject?.GetComponent<EnemyAI>())
+                            {
+                                bushWolfTypeAddon.enemyPrefab.gameObject.GetComponent<EnemyAI>().enemyType = bushWolfTypeOrig;
+                                Plugin.logSource.LogInfo("[GenerateWeedEnemiesList] BushWolf: Replaced addon EnemyAI enemyType");
                             }
 
                             if (GameNetworkManager.Instance.gameVersionNum >= 64)
@@ -202,12 +207,6 @@ namespace YesFox
 
                                 bushWolfTypeOrig.enemyPrefab = bushWolfTypeAddon.enemyPrefab;
                                 Plugin.logSource.LogInfo("[GenerateWeedEnemiesList] BushWolf: Replaced original EnemyType prefab");
-                            }
-
-                            if (bushWolfTypeAddon.enemyPrefab?.gameObject?.GetComponent<EnemyAI>())
-                            {
-                                bushWolfTypeAddon.enemyPrefab.gameObject.GetComponent<EnemyAI>().enemyType = bushWolfTypeOrig;
-                                Plugin.logSource.LogInfo("[GenerateWeedEnemiesList] BushWolf: Replaced addon EnemyAI enemyType");
                             }
                         }
 
