@@ -10,6 +10,7 @@ using System.Reflection;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.AI;
+using UnityEngine.UIElements.UIR;
 using Object = UnityEngine.Object;
 
 namespace YesFox
@@ -26,6 +27,7 @@ namespace YesFox
 
         internal static List<GameObject> _networkPrefabs = new List<GameObject>();
         public static GameObject BushWolfAddonPrefab { get; internal set; }
+        public static EnemyType BushWolfEnemyType { get; internal set; }
 
         internal static ConfigEntry<bool> Shroud_AllMoons;
         internal static ConfigEntry<float> Shroud_SpawnChance_SameMoon;
@@ -110,7 +112,7 @@ namespace YesFox
             {
                 if (i == 3 || (!__instance.levels[i].canSpawnMold && !Plugin.Shroud_AllMoons.Value))
                 {
-                    __instance.levels[i].moldSpreadIterations = 0;
+                    Plugin.logSource.LogInfo($"Skipping level #{i} {__instance.levels[i].PlanetName} mold iterations");
                     continue;
                 }
 
@@ -163,15 +165,22 @@ namespace YesFox
         {
             WeedEnemies.Clear();
 
-            EnemyType[] enemyTypes = Resources.FindObjectsOfTypeAll<EnemyType>().Where(x => x.name == "BushWolf").ToArray();
+            string[] enemyNames = ["BushWolf"];
+            enemyNames = enemyNames.Concat(enemyNames.Select(x => $"{x}Addon")).ToArray();
+            EnemyType[] enemyTypes = Resources.FindObjectsOfTypeAll<EnemyType>().Where(x => enemyNames.Contains(x.name)).ToArray();
             foreach (EnemyType enemyType in enemyTypes)
             {
+                if (enemyType.name.EndsWith("Addon")) continue;
+
                 if (enemyType.name == "BushWolf")
                 {
-                    if (enemyType.enemyPrefab == Plugin.BushWolfAddonPrefab && !Resources.FindObjectsOfTypeAll<EnemyType>().Any(x => x.name == $"{enemyType.name}Addon"))
+                    string addonName = $"{enemyType.name}Addon";
+                    int totalDuplicates = enemyTypes.Count(x => x.name == enemyType.name || x.name == addonName);
+                    bool addonExists = enemyTypes.Any(x => x.name == addonName);
+                    if (enemyType.enemyPrefab == Plugin.BushWolfAddonPrefab && !addonExists && totalDuplicates > 1)
                     {
-                        enemyType.name = "BushWolfAddon";
-                        Plugin.logSource.LogInfo("Renamed Addon Bush Wolf EnemyType");
+                        Plugin.logSource.LogInfo($"Renamed EnemyType: {enemyType.name} > {addonName}");
+                        enemyType.name = addonName;
                         continue;
                     }
 
@@ -187,6 +196,11 @@ namespace YesFox
                         enemyType.enemyPrefab = Plugin.BushWolfAddonPrefab;
                         Plugin.logSource.LogInfo("Replaced Bush Wolf Prefab");
                     }
+                }
+
+                if (Plugin.BushWolfAddonPrefab && Plugin.BushWolfAddonPrefab.gameObject && Plugin.BushWolfAddonPrefab.gameObject.GetComponent<EnemyAI>())
+                {
+                    Plugin.BushWolfAddonPrefab.gameObject.GetComponent<EnemyAI>().enemyType = enemyType;
                 }
 
                 WeedEnemies.Add(new SpawnableEnemyWithRarity()
@@ -301,7 +315,7 @@ namespace YesFox
                 GameObject gameObject = Object.Instantiate(enemyType2.enemyPrefab, position, Quaternion.Euler(Vector3.zero));
                 gameObject.GetComponentInChildren<NetworkObject>().Spawn(destroyWithScene: true);
                 RoundManager.Instance.SpawnedEnemies.Add(gameObject.GetComponent<EnemyAI>());
-                enemyType2.numberSpawned++;
+                gameObject.GetComponent<EnemyAI>().enemyType.numberSpawned++;
                 result = true;
             }
             Plugin.logSource.LogDebug($"{enemyType2.enemyName} attempted to spawn and was allowed");
