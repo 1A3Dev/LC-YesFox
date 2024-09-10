@@ -27,8 +27,11 @@ namespace YesFox
         internal static List<GameObject> _networkPrefabs = new List<GameObject>();
         public static GameObject BushWolfPrefab { get; internal set; }
 
-        internal static ConfigEntry<int> MinimumWeeds;
-        internal static ConfigEntry<int> SpawnChance;
+        internal static ConfigEntry<bool> Shroud_AllMoons;
+        internal static ConfigEntry<float> Shroud_SpawnChance_SameMoon;
+        internal static ConfigEntry<float> Shroud_SpawnChance_OtherMoons;
+        internal static ConfigEntry<int> Fox_MinimumWeeds;
+        internal static ConfigEntry<int> Fox_SpawnChance;
 
         private void Awake()
         {
@@ -36,29 +39,32 @@ namespace YesFox
 
             Assembly patches = Assembly.GetExecutingAssembly();
             harmony.PatchAll(patches);
-            logSource.LogInfo("Patched SetPlanetsMold");
-
-            MinimumWeeds = Config.Bind("Fox Spawning", "Minimum Weeds", 30, "The minimum amount of weeds required to spawn");
-            SpawnChance = Config.Bind("Fox Spawning", "Spawn Chance", -1, new ConfigDescription("What should the spawn chance be? If left as -1 then it will be the same as vanilla (a higher chance the more weeds there are)", new AcceptableValueRange<int>(-1, 100)));
+            logSource.LogInfo("Patches Loaded");
 
             AssetBundle BushWolfBundle = AssetBundle.LoadFromFile(Path.Combine(Path.GetDirectoryName(Info.Location), "bush_wolf"));
             if (BushWolfBundle == null)
             {
-                logSource.LogInfo("Asset bundle not found");
+                logSource.LogError("[AssetBundle] Failed to load asset bundle: bush_wolf");
                 return;
             }
-
             BushWolfPrefab = BushWolfBundle.LoadAsset<GameObject>("Assets/LethalCompany/Game/Prefabs/EnemyAI/BushWolfEnemy.prefab");
             if (BushWolfPrefab != null)
             {
                 if (!_networkPrefabs.Contains(BushWolfPrefab))
                     _networkPrefabs.Add(BushWolfPrefab);
-                logSource.LogInfo("Loaded Bush Wolf prefab");
+                logSource.LogInfo("[AssetBundle] Successfully loaded prefab: BushWolfEnemy");
             }
             else
             {
-                logSource.LogInfo("Failed to load Bush Wolf prefab");
+                logSource.LogError("[AssetBundle] Failed to load prefab: BushWolfEnemy");
             }
+
+            Shroud_AllMoons = Config.Bind("Weed Spawning", "All Moons", false, "Should weeds be able to spawn on all moons excluding gordion?");
+            Shroud_SpawnChance_SameMoon = Config.Bind("Weed Spawning", "Spawn Chance (Current Moon)", 8.5f, new ConfigDescription("What should the chance for them to initially spawn the moon you are routed to be? Weeds attempt to spawn on all moons when you go into orbit after each day.", new AcceptableValueRange<float>(0, 100)));
+            Shroud_SpawnChance_OtherMoons = Config.Bind("Weed Spawning", "Spawn Chance (Other Moons)", 4f, new ConfigDescription("What should the chance for them to initially spawn on other moons be? Weeds attempt to spawn on all moons when you go into orbit after each day.", new AcceptableValueRange<float>(0, 100)));
+
+            Fox_MinimumWeeds = Config.Bind("Fox Spawning", "Minimum Weeds", 30, "The minimum amount of weeds required to spawn");
+            Fox_SpawnChance = Config.Bind("Fox Spawning", "Spawn Chance", -1, new ConfigDescription("What should the spawn chance be? If left as -1 then it will be the same as vanilla (a higher chance the more weeds there are)", new AcceptableValueRange<int>(-1, 100)));
         }
     }
 
@@ -102,7 +108,7 @@ namespace YesFox
             Terminal terminal = Object.FindFirstObjectByType<Terminal>();
             for (int i = 0; i < __instance.levels.Length; i++)
             {
-                if (!__instance.levels[i].canSpawnMold)
+                if (i == 3 || (!__instance.levels[i].canSpawnMold && !Plugin.Shroud_AllMoons.Value))
                 {
                     continue;
                 }
@@ -114,10 +120,27 @@ namespace YesFox
                     continue;
                 }
 
-                float num = ((__instance.levels[i] == __instance.currentLevel) ? 0.085f : ((terminal.groupCredits < 200 && __instance.levels[i].levelID == 12) ? 0.05f : ((!((float)terminal.groupCredits < 500f) || (__instance.levels[i].levelID != 7 && __instance.levels[i].levelID != 6 && __instance.levels[i].levelID < 10) || (__instance.currentLevel.levelID != 5 && __instance.currentLevel.levelID != 8 && __instance.currentLevel.levelID != 4 && __instance.currentLevel.levelID > 2)) ? 0.04f : 0.02f)));
+                float num;
+                if (__instance.levels[i] == __instance.currentLevel)
+                {
+                    num = Plugin.Shroud_SpawnChance_SameMoon.Value / 100f;
+                }
+                else if (terminal.groupCredits < 200 && __instance.levels[i].levelID == 12)
+                {
+                    num = 0.05f;
+                }
+                else if ((float)terminal.groupCredits < 500f && (__instance.levels[i].levelID == 7 || __instance.levels[i].levelID == 6 || __instance.levels[i].levelID >= 10) && (__instance.currentLevel.levelID == 5 || __instance.currentLevel.levelID == 8 || __instance.currentLevel.levelID == 4 || __instance.currentLevel.levelID <= 2))
+                {
+                    num = 0.02f;
+                }
+                else
+                {
+                    num = Plugin.Shroud_SpawnChance_OtherMoons.Value / 100f;
+                }
                 if (random.Next(0, 100) <= (int)(num * 100f))
                 {
                     __instance.levels[i].moldSpreadIterations += random.Next(1, 3);
+                    Plugin.logSource.LogInfo($"Increasing level #{i} {__instance.levels[i].PlanetName} mold iterations for the first time; risen to {__instance.levels[i].moldSpreadIterations}");
                 }
             }
 
@@ -133,10 +156,22 @@ namespace YesFox
         private static void StartOfRound_Start()
         {
             WeedEnemies.Clear();
+            GenerateWeedEnemiesList();
+        }
+
+        public static void GenerateWeedEnemiesList()
+        {
+            if (WeedEnemies.Count > 0) return;
+
             EnemyType[] enemyTypes = Resources.FindObjectsOfTypeAll<EnemyType>().Where(x => x.name == "BushWolf").ToArray();
             foreach (EnemyType enemyType in enemyTypes)
             {
-                if (enemyType.name == "BushWolf" && enemyType.enemyPrefab != Plugin.BushWolfPrefab)
+                if (enemyType.name == "BushWolf" && enemyType.enemyPrefab == Plugin.BushWolfPrefab)
+                {
+                    continue;
+                }
+
+                if (enemyType.name == "BushWolf")
                 {
                     if (GameNetworkManager.Instance.gameVersionNum >= 64)
                     {
@@ -159,7 +194,7 @@ namespace YesFox
                 WeedEnemies.Add(new SpawnableEnemyWithRarity()
                 {
                     enemyType = enemyType,
-                    rarity = 300,
+                    rarity = 100,
                 });
             }
         }
@@ -172,14 +207,28 @@ namespace YesFox
             {
                 num = moldSpreadManager.generatedMold.Count;
             }
-            if (num <= Plugin.MinimumWeeds.Value)
+            if (num <= Plugin.Fox_MinimumWeeds.Value)
             {
+                Plugin.logSource.LogDebug($"Weed enemies attempted to spawn but were denied. Reason: WeedCount | Amount: {num}");
                 return;
             }
-            // 0 <= 0
-            if (Plugin.SpawnChance.Value >= 0 ? WeedEnemySpawnRandom.Next(1, 100) > Plugin.SpawnChance.Value : WeedEnemySpawnRandom.Next(0, 80) > num)
+            if (Plugin.Fox_SpawnChance.Value >= 0)
             {
-                return;
+                int spawnChance = WeedEnemySpawnRandom.Next(1, 100);
+                if (spawnChance > Plugin.Fox_SpawnChance.Value)
+                {
+                    Plugin.logSource.LogDebug($"Weed enemies attempted to spawn but were denied. Reason: SpawnChance | Amount: {spawnChance}");
+                    return;
+                }
+            }
+            else
+            {
+                int spawnChance = WeedEnemySpawnRandom.Next(0, 80);
+                if (spawnChance > num)
+                {
+                    Plugin.logSource.LogDebug($"Weed enemies attempted to spawn but were denied. Reason: SpawnChance | Amount: {spawnChance}");
+                    return;
+                }
             }
             int num2 = WeedEnemySpawnRandom.Next(1, 3);
             GameObject[] spawnPoints = GameObject.FindGameObjectsWithTag("OutsideAINode");
@@ -187,8 +236,12 @@ namespace YesFox
 
             if (WeedEnemies.Count == 0)
             {
-                Plugin.logSource.LogError("Could not find any WeedEnemies");
-                return;
+                GenerateWeedEnemiesList();
+                if (WeedEnemies.Count == 0)
+                {
+                    Plugin.logSource.LogError($"Weed enemies attempted to spawn but were denied. Reason: ListEmpty");
+                    return;
+                }
             }
 
             for (int i = 0; i < num2; i++)
@@ -214,9 +267,10 @@ namespace YesFox
                 if (enemyType.PowerLevel > RoundManager.Instance.currentMaxOutsidePower - RoundManager.Instance.currentOutsideEnemyPower || enemyType.numberSpawned >= enemyType.MaxCount || enemyType.spawningDisabled)
                 {
                     RoundManager.Instance.SpawnProbabilities.Add(0);
+                    Plugin.logSource.LogDebug($"A weed enemy attempted to spawn but was denied. Reason: Probability | Amount: 0");
                     continue;
                 }
-                int num2 = ((RoundManager.Instance.increasedOutsideEnemySpawnRateIndex == i) ? 100 : ((!enemyType.useNumberSpawnedFalloff) ? ((int)((float)RoundManager.Instance.currentLevel.OutsideEnemies[i].rarity * enemyType.probabilityCurve.Evaluate(timeUpToCurrentHour / RoundManager.Instance.timeScript.totalTime))) : ((int)((float)RoundManager.Instance.currentLevel.OutsideEnemies[i].rarity * (enemyType.probabilityCurve.Evaluate(timeUpToCurrentHour / RoundManager.Instance.timeScript.totalTime) * enemyType.numberSpawnedFalloff.Evaluate((float)enemyType.numberSpawned / 10f))))));
+                int num2 = ((RoundManager.Instance.increasedOutsideEnemySpawnRateIndex == i) ? 100 : ((!enemyType.useNumberSpawnedFalloff) ? ((int)((float)WeedEnemies[i].rarity * enemyType.probabilityCurve.Evaluate(timeUpToCurrentHour / RoundManager.Instance.timeScript.totalTime))) : ((int)((float)WeedEnemies[i].rarity * (enemyType.probabilityCurve.Evaluate(timeUpToCurrentHour / RoundManager.Instance.timeScript.totalTime) * enemyType.numberSpawnedFalloff.Evaluate((float)enemyType.numberSpawned / 10f))))));
                 if (enemyType.spawnFromWeeds)
                 {
                     num2 = (int)Mathf.Clamp((float)num2 * ((float)numberOfWeeds / 60f), 0f, 200f);
@@ -225,10 +279,9 @@ namespace YesFox
                 num += num2;
             }
             RoundManager.Instance.firstTimeSpawningWeedEnemies = false;
-            if (num <= 20)
+            if (num <= 0)
             {
-                _ = RoundManager.Instance.currentOutsideEnemyPower;
-                _ = RoundManager.Instance.currentMaxOutsidePower;
+                Plugin.logSource.LogDebug($"A weed enemy attempted to spawn but was denied. Reason: SpawnRate | Amount: {num}");
                 return false;
             }
             bool result = false;
@@ -237,8 +290,10 @@ namespace YesFox
             float num3 = Mathf.Max(enemyType2.spawnInGroupsOf, 1);
             for (int j = 0; (float)j < num3; j++)
             {
-                if (enemyType2.PowerLevel > RoundManager.Instance.currentMaxOutsidePower - RoundManager.Instance.currentOutsideEnemyPower)
+                float currentOutsideEnemyPower = RoundManager.Instance.currentMaxOutsidePower - RoundManager.Instance.currentOutsideEnemyPower;
+                if (enemyType2.PowerLevel > currentOutsideEnemyPower)
                 {
+                    Plugin.logSource.LogDebug($"A weed enemy attempted to spawn but was denied. Reason: PowerLevel | Amount: {currentOutsideEnemyPower}");
                     break;
                 }
                 RoundManager.Instance.currentOutsideEnemyPower += enemyType2.PowerLevel;
@@ -248,10 +303,10 @@ namespace YesFox
                 GameObject gameObject = Object.Instantiate(enemyType2.enemyPrefab, position, Quaternion.Euler(Vector3.zero));
                 gameObject.GetComponentInChildren<NetworkObject>().Spawn(destroyWithScene: true);
                 RoundManager.Instance.SpawnedEnemies.Add(gameObject.GetComponent<EnemyAI>());
-                gameObject.GetComponent<EnemyAI>().enemyType.numberSpawned++;
+                enemyType2.numberSpawned++;
                 result = true;
             }
-            Plugin.logSource.LogInfo("Spawned weed enemy: " + enemyType2.enemyName);
+            Plugin.logSource.LogDebug($"{enemyType2.enemyName} attempted to spawn and was allowed");
             return result;
         }
 
@@ -269,6 +324,17 @@ namespace YesFox
             if (GameNetworkManager.Instance.gameVersionNum >= 64)
             {
                 SpawnWeedEnemies(__instance.currentHour + __instance.hourTimeBetweenEnemySpawnBatches);
+            }
+        }
+
+        // Fixed aggressivePosition not being set if there isn't a MoldAttractionPoint
+        [HarmonyPatch(typeof(BushWolfEnemy), "GetBiggestWeedPatch")]
+        [HarmonyPostfix]
+        public static void GetBiggestWeedPatch(BushWolfEnemy __instance, bool __result)
+        {
+            if (__result && !GameObject.FindGameObjectWithTag("MoldAttractionPoint"))
+            {
+                __instance.aggressivePosition = __instance.mostHiddenPosition;
             }
         }
     }
