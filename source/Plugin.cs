@@ -168,8 +168,9 @@ namespace YesFox
             {
                 if (enemyType.name == "BushWolf")
                 {
-                    if (enemyType.enemyPrefab == Plugin.BushWolfPrefab)
+                    if (enemyType.enemyPrefab == Plugin.BushWolfPrefab && !Resources.FindObjectsOfTypeAll<EnemyType>().Any(x => x.name == $"{enemyType.name}Addon"))
                     {
+                        enemyType.name = "BushWolfAddon";
                         continue;
                     }
 
