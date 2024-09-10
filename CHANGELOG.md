@@ -1,5 +1,6 @@
 ### 1.0.7
 
+- Fixed a vanilla issue where the aggressivePosition doesn't get set if the moon has no mold attraction points
 - Added various config options
 - Fixed multiple foxes being able to spawn
 
