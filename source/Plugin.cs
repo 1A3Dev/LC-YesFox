@@ -141,7 +141,7 @@ namespace YesFox
                 {
                     num = Plugin.Shroud_SpawnChance_OtherMoons.Value / 100f;
                 }
-                if (random.Next(0, 100) <= (int)(num * 100f))
+                if (random.NextDouble() <= num)
                 {
                     __instance.levels[i].moldSpreadIterations += random.Next(1, 3);
                     Plugin.logSource.LogInfo($"Increasing level #{i} {__instance.levels[i].PlanetName} mold iterations for the first time; risen to {__instance.levels[i].moldSpreadIterations}");
