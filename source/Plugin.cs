@@ -230,7 +230,7 @@ namespace YesFox
             int num = 0;
             if (moldSpreadManager != null)
             {
-                num = moldSpreadManager.generatedMold.Count;
+                num = moldSpreadManager.generatedMold.Count(x => x != null && x.activeSelf);
             }
             if (num <= Plugin.Fox_MinimumWeeds.Value)
             {
