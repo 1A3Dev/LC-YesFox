@@ -129,17 +129,17 @@ namespace YesFox
                 {
                     num = Plugin.Shroud_SpawnChance_SameMoon.Value / 100f;
                 }
-                else if (terminal.groupCredits < 200 && __instance.levels[i].levelID == 12)
-                {
-                    num = 0.05f;
-                }
-                else if ((float)terminal.groupCredits < 500f && (__instance.levels[i].levelID == 7 || __instance.levels[i].levelID == 6 || __instance.levels[i].levelID >= 10) && (__instance.currentLevel.levelID == 5 || __instance.currentLevel.levelID == 8 || __instance.currentLevel.levelID == 4 || __instance.currentLevel.levelID <= 2))
-                {
-                    num = 0.02f;
-                }
                 else
                 {
                     num = Plugin.Shroud_SpawnChance_OtherMoons.Value / 100f;
+                    if (terminal.groupCredits < 200 && __instance.levels[i].levelID == 12)
+                    {
+                        num *= 1.25f; // 0.04 -> 0.05 (vanilla)
+                    }
+                    else if (terminal.groupCredits < 500 && (__instance.levels[i].levelID == 7 || __instance.levels[i].levelID == 6 || __instance.levels[i].levelID >= 10) && (__instance.currentLevel.levelID == 5 || __instance.currentLevel.levelID == 8 || __instance.currentLevel.levelID == 4 || __instance.currentLevel.levelID <= 2))
+                    {
+                        num *= 0.5f; // 0.04 -> 0.02 (vanilla)
+                    }
                 }
                 if (random.NextDouble() <= num)
                 {
