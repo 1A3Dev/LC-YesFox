@@ -66,7 +66,7 @@ namespace YesFox
             Shroud_SpawnChance_SameMoon = Config.Bind("Weed Spawning", "Spawn Chance (Current Moon)", 8.5f, new ConfigDescription("What should the chance for them to initially spawn the moon you are routed to be? Weeds attempt to spawn on all moons when you go into orbit after each day.", new AcceptableValueRange<float>(0, 100)));
             Shroud_SpawnChance_OtherMoons = Config.Bind("Weed Spawning", "Spawn Chance (Other Moons)", 4f, new ConfigDescription("What should the chance for them to initially spawn on other moons be? Weeds attempt to spawn on all moons when you go into orbit after each day.", new AcceptableValueRange<float>(0, 100)));
 
-            Fox_MinimumWeeds = Config.Bind("Fox Spawning", "Minimum Weeds", 30, "The minimum amount of weeds required to spawn");
+            Fox_MinimumWeeds = Config.Bind("Fox Spawning", "Minimum Weeds", 31, "The minimum amount of weeds required to spawn");
             Fox_SpawnChance = Config.Bind("Fox Spawning", "Spawn Chance", -1, new ConfigDescription("What should the spawn chance be? If left as -1 then it will be the same as vanilla (a higher chance the more weeds there are)", new AcceptableValueRange<int>(-1, 100)));
         }
     }
@@ -232,7 +232,7 @@ namespace YesFox
             {
                 num = moldSpreadManager.generatedMold.Count(x => x != null && x.activeSelf);
             }
-            if (num <= Plugin.Fox_MinimumWeeds.Value)
+            if (num < Plugin.Fox_MinimumWeeds.Value)
             {
                 Plugin.logSource.LogDebug($"Weed enemies attempted to spawn but were denied. Reason: WeedCount | Amount: {num}");
                 return;
