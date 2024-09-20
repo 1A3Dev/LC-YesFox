@@ -63,7 +63,7 @@ namespace YesFox
             Shroud_SpawnChance_SameMoon = Config.Bind("Weed Spawning", "Spawn Chance (Current Moon)", 8.5f, new ConfigDescription("What should the chance for them to initially spawn the moon you are routed to be? Weeds attempt to spawn on all moons when you go into orbit after each day.", new AcceptableValueRange<float>(0, 100)));
             Shroud_SpawnChance_OtherMoons = Config.Bind("Weed Spawning", "Spawn Chance (Other Moons)", 4f, new ConfigDescription("What should the chance for them to initially spawn on other moons be? Weeds attempt to spawn on all moons when you go into orbit after each day.", new AcceptableValueRange<float>(0, 100)));
 
-            Fox_MinimumWeeds = Config.Bind("Fox Spawning", "Minimum Weeds", 30, "The minimum amount of weeds required to spawn");
+            Fox_MinimumWeeds = Config.Bind("Fox Spawning", "Minimum Weeds", 31, "The minimum amount of weeds required to spawn");
             Fox_SpawnChance = Config.Bind("Fox Spawning", "Spawn Chance", -1, new ConfigDescription("What should the spawn chance be? If left as -1 then it will be the same as vanilla (a higher chance the more weeds there are)", new AcceptableValueRange<int>(-1, 100)));
         }
     }
@@ -126,19 +126,19 @@ namespace YesFox
                 {
                     num = Plugin.Shroud_SpawnChance_SameMoon.Value / 100f;
                 }
-                else if (terminal.groupCredits < 200 && __instance.levels[i].levelID == 12)
-                {
-                    num = 0.05f;
-                }
-                else if ((float)terminal.groupCredits < 500f && (__instance.levels[i].levelID == 7 || __instance.levels[i].levelID == 6 || __instance.levels[i].levelID >= 10) && (__instance.currentLevel.levelID == 5 || __instance.currentLevel.levelID == 8 || __instance.currentLevel.levelID == 4 || __instance.currentLevel.levelID <= 2))
-                {
-                    num = 0.02f;
-                }
                 else
                 {
                     num = Plugin.Shroud_SpawnChance_OtherMoons.Value / 100f;
+                    if (terminal.groupCredits < 200 && __instance.levels[i].levelID == 12)
+                    {
+                        num *= 1.25f; // 0.04 -> 0.05 (vanilla)
+                    }
+                    else if (terminal.groupCredits < 500 && (__instance.levels[i].levelID == 7 || __instance.levels[i].levelID == 6 || __instance.levels[i].levelID >= 10) && (__instance.currentLevel.levelID == 5 || __instance.currentLevel.levelID == 8 || __instance.currentLevel.levelID == 4 || __instance.currentLevel.levelID <= 2))
+                    {
+                        num *= 0.5f; // 0.04 -> 0.02 (vanilla)
+                    }
                 }
-                if (random.Next(0, 100) <= (int)(num * 100f))
+                if (random.NextDouble() <= num)
                 {
                     __instance.levels[i].moldSpreadIterations += random.Next(1, 3);
                     Plugin.logSource.LogInfo($"Increasing level #{i} {__instance.levels[i].PlanetName} mold iterations for the first time; risen to {__instance.levels[i].moldSpreadIterations}");
@@ -227,9 +227,9 @@ namespace YesFox
             int num = 0;
             if (moldSpreadManager != null)
             {
-                num = moldSpreadManager.generatedMold.Count;
+                num = moldSpreadManager.generatedMold.Count(x => x != null && x.activeSelf);
             }
-            if (num <= Plugin.Fox_MinimumWeeds.Value)
+            if (num < Plugin.Fox_MinimumWeeds.Value)
             {
                 Plugin.logSource.LogDebug($"Weed enemies attempted to spawn but were denied. Reason: WeedCount | Amount: {num}");
                 return;
