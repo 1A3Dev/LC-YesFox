@@ -16,13 +16,10 @@ using Object = UnityEngine.Object;
 
 namespace YesFox
 {
-    [BepInPlugin(modGUID, "YesFox", modVersion)]
+    [BepInPlugin(MyPluginInfo.PLUGIN_GUID, MyPluginInfo.PLUGIN_NAME, MyPluginInfo.PLUGIN_VERSION)]
     internal class Plugin : BaseUnityPlugin
     {
-        internal const string modGUID = "Dev1A3.YesFox";
-        internal const string modVersion = "1.0.0";
-
-        private readonly Harmony harmony = new Harmony(modGUID);
+        private readonly Harmony harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);
 
         internal static ManualLogSource logSource;
 
