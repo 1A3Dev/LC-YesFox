@@ -151,6 +151,42 @@ namespace YesFox
             return false;
         }
 
+        // called after the scene (and AI nodes) load, but before LoadNewLevelWait selects a start position
+        [HarmonyPatch(typeof(StartOfRound), "PlayerLoadedServerRpc")]
+        [HarmonyPostfix]
+        static void PlayerLoadedServerRpc(StartOfRound __instance)
+        {
+            if (!__instance.IsServer || __instance.currentLevel.moldSpreadIterations < 1)
+                return;
+
+            GameObject[] outsideAINodes = GameObject.FindGameObjectsWithTag("OutsideAINode");
+            if (outsideAINodes == null || outsideAINodes.Length < 1)
+                return;
+
+            Vector3 shipPos = new(1.27146339f, 0.278438568f, -7.5f); // StartOfRound.elevatorTransform position, when fully landed
+
+            outsideAINodes = [.. outsideAINodes.OrderBy(x => Vector3.Distance(x.transform.position, shipPos))];
+
+            // starting point has already been chosen
+            if (__instance.currentLevel.moldStartPosition >= 0 && __instance.currentLevel.moldStartPosition < outsideAINodes.Length)
+            {
+                float shipDist = Vector3.Distance(outsideAINodes[__instance.currentLevel.moldStartPosition].transform.position, shipPos);
+
+                // spot chosen is already an acceptable distance from the ship
+                if (shipDist >= 40f)
+                    return;
+
+                Plugin.logSource.LogInfo($"Mold growth is starting from node #{__instance.currentLevel.moldStartPosition} which is too close to the ship ({shipDist} < 40)");
+            }
+
+            // starting point has not been chosen, or was invalid
+
+            GameObject[] validSpots = outsideAINodes.Where(outsideAINode => Vector3.Distance(outsideAINode.transform.position, shipPos) >= 40f).ToArray();
+            __instance.currentLevel.moldStartPosition = System.Array.IndexOf(outsideAINodes, validSpots[new System.Random(__instance.randomMapSeed + 2017).Next(validSpots.Length)]);
+
+            Plugin.logSource.LogInfo($"Mold growth: Selected node #{__instance.currentLevel.moldStartPosition}: coords {outsideAINodes[__instance.currentLevel.moldStartPosition].transform.position}, dist {Vector3.Distance(outsideAINodes[__instance.currentLevel.moldStartPosition].transform.position, shipPos)}");
+        }
+
         // v64
         public static System.Random WeedEnemySpawnRandom;
         public static List<SpawnableEnemyWithRarity> WeedEnemies = new List<SpawnableEnemyWithRarity>();
