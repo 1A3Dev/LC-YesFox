@@ -182,6 +182,19 @@ namespace YesFox
             // starting point has not been chosen, or was invalid
 
             GameObject[] validSpots = outsideAINodes.Where(outsideAINode => Vector3.Distance(outsideAINode.transform.position, shipPos) >= 40f).ToArray();
+            if (validSpots.Length < 1)
+            {
+                // custom level; try shrinking range
+                validSpots = outsideAINodes.Where(outsideAINode => Vector3.Distance(outsideAINode.transform.position, shipPos) >= 35f).ToArray();
+                if (validSpots.Length < 1)
+                {
+                    // level is just too small
+                    Plugin.logSource.LogInfo($"Level \"{__instance.currentLevel.PlanetName}\" has no AI nodes at a valid distance");
+                    __instance.currentLevel.moldSpreadIterations = 0;
+                    return;
+                }
+            }
+
             __instance.currentLevel.moldStartPosition = System.Array.IndexOf(outsideAINodes, validSpots[new System.Random(__instance.randomMapSeed + 2017).Next(validSpots.Length)]);
 
             Plugin.logSource.LogInfo($"Mold growth: Selected node #{__instance.currentLevel.moldStartPosition}: coords {outsideAINodes[__instance.currentLevel.moldStartPosition].transform.position}, dist {Vector3.Distance(outsideAINodes[__instance.currentLevel.moldStartPosition].transform.position, shipPos)}");
