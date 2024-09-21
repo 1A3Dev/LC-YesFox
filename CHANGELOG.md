@@ -1,3 +1,10 @@
+### 1.0.8
+
+- Fixed the spawn chance percentages not working as expected
+- The vanilla dynamic chance adjustments for Embrion, Rend, Dine, and Artifice now dynamically apply to the user's config values
+- Fixed vain shrouds being able to spawn too close to the the ship
+- The Kidnapper Fox's spawn chance no longer includes destroyed weeds in the calculation
+
 ### 1.0.7
 
 - Fixed a vanilla issue where the aggressivePosition doesn't get set if the moon has no mold attraction points
