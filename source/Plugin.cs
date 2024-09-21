@@ -188,6 +188,7 @@ namespace YesFox
                     // level is just too small
                     Plugin.logSource.LogInfo($"Level \"{__instance.currentLevel.PlanetName}\" has no AI nodes at a valid distance");
                     __instance.currentLevel.moldSpreadIterations = 0;
+                    __instance.currentLevel.moldStartPosition = -1;
                     return;
                 }
             }
