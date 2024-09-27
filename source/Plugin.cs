@@ -11,7 +11,6 @@ using System.Reflection;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.AI;
-using UnityEngine.UIElements.UIR;
 using Object = UnityEngine.Object;
 
 namespace YesFox
