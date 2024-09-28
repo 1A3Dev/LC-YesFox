@@ -1,3 +1,7 @@
+### 1.0.9
+
+- Added a setting to adjust the maximum number of iterations
+
 ### 1.0.8
 
 - Fixed the spawn chance percentages not working as expected

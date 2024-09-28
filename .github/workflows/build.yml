@@ -32,11 +32,3 @@ jobs:
       - name: Build solution
         run: |
           dotnet build -c Release
-
-      - name: Upload thunderstore artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: thunderstore-build
-          path: |
-            ./*/assets/thunderstore.toml.user
-            ./*/bin/Release/netstandard2.1/dist/*.zip
