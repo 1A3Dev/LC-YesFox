@@ -416,7 +416,7 @@ namespace YesFox
             if (___nearbyColliders != null && ___nearbyColliders.Length > 10)
                 return;
 
-            MoldSpreadManager moldSpreadManager = Object.FindObjectOfType<MoldSpreadManager>();
+            MoldSpreadManager moldSpreadManager = Object.FindFirstObjectByType<MoldSpreadManager>();
             if (moldSpreadManager?.generatedMold == null)
                 return;
 
