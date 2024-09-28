@@ -414,8 +414,14 @@ namespace YesFox
         [HarmonyPrefix]
         public static void Pre_GetBiggestWeedPatch(ref Collider[] ___nearbyColliders)
         {
+            if (___nearbyColliders != null && ___nearbyColliders.Length > 10)
+                return;
+
             MoldSpreadManager moldSpreadManager = Object.FindObjectOfType<MoldSpreadManager>();
-            if (moldSpreadManager?.generatedMold != null && (___nearbyColliders == null || moldSpreadManager.generatedMold.Count > ___nearbyColliders.Length))
+            if (moldSpreadManager?.generatedMold == null)
+                return;
+
+            if (___nearbyColliders == null || moldSpreadManager.generatedMold.Count > ___nearbyColliders.Length)
             {
                 ___nearbyColliders = new Collider[moldSpreadManager.generatedMold.Count];
             }
