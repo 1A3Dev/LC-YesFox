@@ -410,10 +410,21 @@ namespace YesFox
             }
         }
 
+        [HarmonyPatch(typeof(BushWolfEnemy), "GetBiggestWeedPatch")]
+        [HarmonyPrefix]
+        public static void Pre_GetBiggestWeedPatch(ref Collider[] ___nearbyColliders)
+        {
+            MoldSpreadManager moldSpreadManager = Object.FindObjectOfType<MoldSpreadManager>();
+            if (moldSpreadManager?.generatedMold != null && (___nearbyColliders == null || moldSpreadManager.generatedMold.Count > ___nearbyColliders.Length))
+            {
+                ___nearbyColliders = new Collider[moldSpreadManager.generatedMold.Count];
+            }
+        }
+
         // Fixed aggressivePosition not being set if there isn't a MoldAttractionPoint
         [HarmonyPatch(typeof(BushWolfEnemy), "GetBiggestWeedPatch")]
         [HarmonyPostfix]
-        public static void GetBiggestWeedPatch(BushWolfEnemy __instance, bool __result)
+        public static void Post_GetBiggestWeedPatch(BushWolfEnemy __instance, bool __result)
         {
             if (__result && !GameObject.FindGameObjectWithTag("MoldAttractionPoint"))
             {
