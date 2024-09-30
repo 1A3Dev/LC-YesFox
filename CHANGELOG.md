@@ -1,6 +1,7 @@
 ### 1.0.9
 
-- Added a setting to adjust the maximum number of iterations
+- Config setting to cap the number of weed iterations generated
+- Corrected logic for nesting in biggest weed patch
 
 ### 1.0.8
 
