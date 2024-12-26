@@ -180,10 +180,10 @@ namespace YesFox
                 float shipDist = Vector3.Distance(outsideAINodes[__instance.currentLevel.moldStartPosition].transform.position, shipPos);
 
                 // spot chosen is already an acceptable distance from the ship
-                if (shipDist >= 40f)
+                if (shipDist >= 30f)
                     return;
 
-                Plugin.logSource.LogInfo($"Mold growth is starting from node #{__instance.currentLevel.moldStartPosition} which is too close to the ship ({shipDist} < 40)");
+                Plugin.logSource.LogInfo($"Mold growth is starting from node #{__instance.currentLevel.moldStartPosition} which is too close to the ship ({shipDist} < 30)");
             }
 
             // starting point has not been chosen, or was invalid
@@ -192,7 +192,7 @@ namespace YesFox
             if (validSpots.Length < 1)
             {
                 // custom level; try shrinking range
-                validSpots = outsideAINodes.Where(outsideAINode => Vector3.Distance(outsideAINode.transform.position, shipPos) >= 35f).ToArray();
+                validSpots = outsideAINodes.Where(outsideAINode => Vector3.Distance(outsideAINode.transform.position, shipPos) >= 30f).ToArray();
                 if (validSpots.Length < 1)
                 {
                     // level is just too small
