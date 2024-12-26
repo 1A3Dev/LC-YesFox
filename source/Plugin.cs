@@ -436,5 +436,30 @@ namespace YesFox
                 __instance.aggressivePosition = __instance.mostHiddenPosition;
             }
         }
+
+        static int index = -1;
+
+        // Fixes weeds resetting when they naturally fail to spawn
+        [HarmonyPatch(typeof(MoldSpreadManager), "GenerateMold")]
+        [HarmonyPrefix]
+        static void Pre_GenerateMold(MoldSpreadManager __instance)
+        {
+            index = StartOfRound.Instance.currentLevel.moldStartPosition;
+        }
+        [HarmonyPatch(typeof(MoldSpreadManager), "GenerateMold")]
+        [HarmonyPostfix]
+        static void Post_GenerateMold(MoldSpreadManager __instance, int iterations)
+        {
+            if (__instance.iterationsThisDay < 1 && iterations > 0)
+            {
+                Plugin.logSource.LogInfo($"Mold growth on \"{StartOfRound.Instance.currentLevel.PlanetName}\" erroneously reset from {iterations} iterations");
+                if (__instance.IsServer)
+                {
+                    StartOfRound.Instance.currentLevel.moldSpreadIterations = iterations;
+                    if (iterations > 1)
+                        StartOfRound.Instance.currentLevel.moldStartPosition = index;
+                }
+            }
+        }
     }
 }
