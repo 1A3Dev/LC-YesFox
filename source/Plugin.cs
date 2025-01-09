@@ -160,6 +160,13 @@ namespace YesFox
             if (!__instance.IsServer || __instance.currentLevel.moldSpreadIterations < 1)
                 return;
 
+            if (!__instance.currentLevel.canSpawnMold && !Plugin.Shroud_AllMoons.Value)
+            {
+                __instance.currentLevel.moldSpreadIterations = 0;
+                __instance.currentLevel.moldStartPosition = -1;
+                return;
+            }
+
             // retroactively apply iteration cap to old save files
             if (__instance.currentLevel.moldSpreadIterations > Plugin.Shroud_MaximumIterations.Value)
             {
@@ -456,6 +463,7 @@ namespace YesFox
                 if (__instance.IsServer)
                 {
                     StartOfRound.Instance.currentLevel.moldSpreadIterations = iterations;
+                    // at exactly 1 iteration, player will have never had the opportunity to see the weeds before; picking a different spawn location might help
                     if (iterations > 1)
                         StartOfRound.Instance.currentLevel.moldStartPosition = index;
                 }
