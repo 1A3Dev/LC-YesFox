@@ -33,6 +33,9 @@
         <Reference Include="Assembly-CSharp" Publicize="true">
             <HintPath>$(LethalCompanyDir)Lethal Company_Data/Managed/Assembly-CSharp.dll</HintPath>
         </Reference>
+		<Reference Include="Assembly-CSharp-firstpass">
+			<HintPath>$(LethalCompanyDir)Lethal Company_Data/Managed/Assembly-CSharp-firstpass.dll</HintPath>
+		</Reference>
         <Reference Include="Unity.Netcode.Runtime">
             <HintPath>$(LethalCompanyDir)Lethal Company_Data/Managed/Unity.Netcode.Runtime.dll</HintPath>
         </Reference>

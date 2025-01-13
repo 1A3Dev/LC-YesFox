@@ -455,17 +455,56 @@ namespace YesFox
         [HarmonyPostfix]
         static void Post_GenerateMold(MoldSpreadManager __instance, int __state, int iterations)
         {
-            if (__instance.iterationsThisDay < 1 && iterations > 0)
+            if (iterations > 0)
             {
-                Plugin.logSource.LogInfo($"Mold growth on \"{StartOfRound.Instance.currentLevel.PlanetName}\" erroneously reset from {iterations} iterations");
-                if (__instance.IsServer)
+                if (__instance.iterationsThisDay > 0)
                 {
-                    StartOfRound.Instance.currentLevel.moldSpreadIterations = iterations;
-                    // at exactly 1 iteration, player will have never had the opportunity to see the weeds before; picking a different spawn location might help
-                    if (iterations > 1)
-                        StartOfRound.Instance.currentLevel.moldStartPosition = __state;
+                    if (__instance.IsServer)
+                    {
+                        // weed growth has succeeded at least one time for this planet
+                        ES3.Save($"YesFox_{StartOfRound.Instance.currentLevel.name}_Success", true, __instance.currentSaveFileName);
+                    }
+                }
+                else
+                {
+                    Plugin.logSource.LogInfo($"Mold growth on \"{StartOfRound.Instance.currentLevel.PlanetName}\" erroneously reset from {iterations} iterations");
+                    if (__instance.IsServer)
+                    {
+                        // restore the previous values so weeds won't reset their growth cycle or change origin
+                        if (ES3.Load($"YesFox_{StartOfRound.Instance.currentLevel.name}_Success", __instance.currentSaveFileName, false))
+                        {
+                            StartOfRound.Instance.currentLevel.moldSpreadIterations = iterations;
+                            StartOfRound.Instance.currentLevel.moldStartPosition = __state;
+                        }
+                        // since player hasn't seen weeds on this moon before, we can instead limit the iteration count, as if a new infestation sprung up after leaving
+                        else
+                        {
+                            StartOfRound.Instance.currentLevel.moldSpreadIterations = Mathf.Min(iterations, 2);
+                            Plugin.logSource.LogInfo($"Mold has never been seen on \"{StartOfRound.Instance.currentLevel.PlanetName}\" before, reset iterations");
+                        }
+                    }
                 }
             }
+        }
+        [HarmonyPatch(typeof(StartOfRound), "ResetMoldStates")]
+        [HarmonyPostfix]
+        static void Post_ResetMoldStates(StartOfRound __instance)
+        {
+            if (!__instance.IsServer)
+                return;
+
+            foreach (SelectableLevel level in __instance.levels)
+                ES3.DeleteKey($"YesFox_{level.name}_Success", __instance.currentSaveFileName);
+        }
+        [HarmonyPatch(typeof(MoldSpreadManager), "CheckIfAllSporesDestroyed")]
+        [HarmonyPostfix]
+        static void Post_CheckIfAllSporesDestroyed(MoldSpreadManager __instance)
+        {
+            if (!__instance.IsServer)
+                return;
+
+            if (StartOfRound.Instance.currentLevel.moldSpreadIterations < 1)
+                ES3.DeleteKey($"YesFox_{StartOfRound.Instance.currentLevel.name}_Success", __instance.currentSaveFileName);
         }
     }
 }
