@@ -444,18 +444,16 @@ namespace YesFox
             }
         }
 
-        static int index = -1;
-
         // Fixes weeds resetting when they naturally fail to spawn
         [HarmonyPatch(typeof(MoldSpreadManager), "GenerateMold")]
         [HarmonyPrefix]
-        static void Pre_GenerateMold(MoldSpreadManager __instance)
+        static void Pre_GenerateMold(MoldSpreadManager __instance, ref int __state)
         {
-            index = StartOfRound.Instance.currentLevel.moldStartPosition;
+            __state = StartOfRound.Instance.currentLevel.moldStartPosition;
         }
         [HarmonyPatch(typeof(MoldSpreadManager), "GenerateMold")]
         [HarmonyPostfix]
-        static void Post_GenerateMold(MoldSpreadManager __instance, int iterations)
+        static void Post_GenerateMold(MoldSpreadManager __instance, int __state, int iterations)
         {
             if (__instance.iterationsThisDay < 1 && iterations > 0)
             {
@@ -465,7 +463,7 @@ namespace YesFox
                     StartOfRound.Instance.currentLevel.moldSpreadIterations = iterations;
                     // at exactly 1 iteration, player will have never had the opportunity to see the weeds before; picking a different spawn location might help
                     if (iterations > 1)
-                        StartOfRound.Instance.currentLevel.moldStartPosition = index;
+                        StartOfRound.Instance.currentLevel.moldStartPosition = __state;
                 }
             }
         }
