@@ -461,8 +461,12 @@ namespace YesFox
                 {
                     if (__instance.IsServer)
                     {
-                        // weed growth has succeeded at least one time for this planet
-                        ES3.Save($"YesFox_{StartOfRound.Instance.currentLevel.name}_Success", true, __instance.currentSaveFileName);
+                        if (!ES3.Load($"YesFox_{StartOfRound.Instance.currentLevel.name}_Success", __instance.currentSaveFileName, false))
+                        {
+                            // weed growth has succeeded at least one time for this planet
+                            ES3.Save($"YesFox_{StartOfRound.Instance.currentLevel.name}_Success", true, __instance.currentSaveFileName);
+                            Plugin.logSource.LogDebug($"Mold growth on \"{StartOfRound.Instance.currentLevel.PlanetName}\" succeeded for first time");
+                        }
                     }
                 }
                 else
@@ -494,7 +498,10 @@ namespace YesFox
                 return;
 
             foreach (SelectableLevel level in __instance.levels)
+            {
                 ES3.DeleteKey($"YesFox_{level.name}_Success", __instance.currentSaveFileName);
+                Plugin.logSource.LogDebug($"Reset mold growth success for \"{level.PlanetName}\" (ship reset)");
+            }
         }
         [HarmonyPatch(typeof(MoldSpreadManager), "CheckIfAllSporesDestroyed")]
         [HarmonyPostfix]
@@ -504,7 +511,10 @@ namespace YesFox
                 return;
 
             if (StartOfRound.Instance.currentLevel.moldSpreadIterations < 1)
+            {
                 ES3.DeleteKey($"YesFox_{StartOfRound.Instance.currentLevel.name}_Success", __instance.currentSaveFileName);
+                Plugin.logSource.LogDebug($"Reset mold growth success for \"{StartOfRound.Instance.currentLevel.PlanetName}\" (all spores destroyed)");
+            }
         }
     }
 }
