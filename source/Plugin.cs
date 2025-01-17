@@ -11,6 +11,7 @@ using System.Reflection;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.AI;
+using static Unity.Audio.Handle;
 using Object = UnityEngine.Object;
 
 namespace YesFox
@@ -195,24 +196,44 @@ namespace YesFox
 
             // starting point has not been chosen, or was invalid
 
-            GameObject[] validSpots = outsideAINodes.Where(outsideAINode => Vector3.Distance(outsideAINode.transform.position, shipPos) >= 40f).ToArray();
-            if (validSpots.Length < 1)
+            System.Random random = new System.Random(__instance.randomMapSeed + 2017);
+            MoldSpreadManager moldSpreadManager = Object.FindAnyObjectByType<MoldSpreadManager>();
+            int temp = __instance.currentLevel.moldSpreadIterations; // preserve
+            for (int i = 0; i < outsideAINodes.Length; i++)
             {
-                // custom level; try shrinking range
-                validSpots = outsideAINodes.Where(outsideAINode => Vector3.Distance(outsideAINode.transform.position, shipPos) >= 30f).ToArray();
-                if (validSpots.Length < 1)
+                float shipDist = Vector3.Distance(outsideAINodes[i].transform.position, shipPos);
+                // greater than 40 units and selected randomly
+                if (shipDist >= 40f && (random.Next(100) < 13 || outsideAINodes.Length - i < 20))
                 {
-                    // level is just too small
-                    Plugin.logSource.LogInfo($"Level \"{__instance.currentLevel.PlanetName}\" has no AI nodes at a valid distance");
-                    __instance.currentLevel.moldSpreadIterations = 0;
-                    __instance.currentLevel.moldStartPosition = -1;
-                    return;
+                    Plugin.logSource.LogDebug($"Mold growth: outsideAINodes[{i}] is candidate (ship dist: {shipDist} > 40)");
+                    // furthest distance in vanilla is on Artifice (7.88802)
+                    if (Physics.Raycast(outsideAINodes[i].transform.position, Vector3.down, out RaycastHit hit, 8f, StartOfRound.Instance.collidersAndRoomMaskAndDefault, QueryTriggerInteraction.Ignore))
+                    {
+                        // final test... can the fox spawn here?
+
+                        // must simulate weed growth, there aren't any shortcuts for this
+                        moldSpreadManager.GenerateMold(outsideAINodes[i].transform.position, Plugin.Shroud_MaximumIterations.Value);
+                        int amt = moldSpreadManager.generatedMold.Count;
+                        moldSpreadManager.RemoveAllMold();
+
+                        if (amt >= Plugin.Fox_MinimumWeeds.Value)
+                        {
+                            __instance.currentLevel.moldStartPosition = i;
+                            __instance.currentLevel.moldSpreadIterations = temp;
+                            Plugin.logSource.LogInfo($"Mold growth: Selected outsideAINodes[{i}]: coords {outsideAINodes[i].transform.position}, dist {shipDist}");
+                            return;
+                        }
+                        else
+                            Plugin.logSource.LogDebug($"Mold growth: outsideAINodes[{i}] rejected (max weeds: {amt} < {Plugin.Fox_MinimumWeeds.Value})");
+                    }
+                    else
+                        Plugin.logSource.LogDebug($"Mold growth: outsideAINodes[{i}] rejected (no ground)");
                 }
             }
 
-            __instance.currentLevel.moldStartPosition = System.Array.IndexOf(outsideAINodes, validSpots[new System.Random(__instance.randomMapSeed + 2017).Next(validSpots.Length)]);
-
-            Plugin.logSource.LogInfo($"Mold growth: Selected node #{__instance.currentLevel.moldStartPosition}: coords {outsideAINodes[__instance.currentLevel.moldStartPosition].transform.position}, dist {Vector3.Distance(outsideAINodes[__instance.currentLevel.moldStartPosition].transform.position, shipPos)}");
+            __instance.currentLevel.moldSpreadIterations = 0;
+            __instance.currentLevel.moldStartPosition = -1;
+            Plugin.logSource.LogInfo($"Level \"{__instance.currentLevel.PlanetName}\" has no valid AI nodes");
         }
 
         // v64
@@ -441,96 +462,6 @@ namespace YesFox
             if (__result && !GameObject.FindGameObjectWithTag("MoldAttractionPoint"))
             {
                 __instance.aggressivePosition = __instance.mostHiddenPosition;
-            }
-        }
-
-        // Fixes weeds resetting when they naturally fail to spawn
-        static bool writeSuccessOnNextSave;
-        [HarmonyPatch(typeof(MoldSpreadManager), "GenerateMold")]
-        [HarmonyPrefix]
-        static void Pre_GenerateMold(MoldSpreadManager __instance, ref int __state)
-        {
-            __state = StartOfRound.Instance.currentLevel.moldStartPosition;
-        }
-        [HarmonyPatch(typeof(MoldSpreadManager), "GenerateMold")]
-        [HarmonyPostfix]
-        static void Post_GenerateMold(MoldSpreadManager __instance, int __state, int iterations)
-        {
-            if (iterations > 0 && !StartOfRound.Instance.isChallengeFile)
-            {
-                if (__instance.iterationsThisDay > 0)
-                {
-                    if (__instance.IsServer)
-                    {
-                        if (!ES3.Load($"YesFox_{StartOfRound.Instance.currentLevel.name}_Success", GameNetworkManager.Instance.currentSaveFileName, false))
-                        {
-                            // weed growth has succeeded at least one time for this planet
-                            writeSuccessOnNextSave = true;
-                            Plugin.logSource.LogDebug($"Mold growth on \"{StartOfRound.Instance.currentLevel.PlanetName}\" succeeded for first time");
-                        }
-                    }
-                }
-                else
-                {
-                    Plugin.logSource.LogInfo($"Mold growth on \"{StartOfRound.Instance.currentLevel.PlanetName}\" erroneously reset from {iterations} iterations");
-                    if (__instance.IsServer)
-                    {
-                        // restore the previous values so weeds won't reset their growth cycle or change origin
-                        if (ES3.Load($"YesFox_{StartOfRound.Instance.currentLevel.name}_Success", GameNetworkManager.Instance.currentSaveFileName, false))
-                        {
-                            StartOfRound.Instance.currentLevel.moldSpreadIterations = iterations;
-                            StartOfRound.Instance.currentLevel.moldStartPosition = __state;
-                            Plugin.logSource.LogInfo($"Mold has been seen on \"{StartOfRound.Instance.currentLevel.PlanetName}\" before, previous values will be restored");
-                        }
-                        // since player hasn't seen weeds on this moon before, we can instead limit the iteration count, as if a new infestation sprung up after leaving
-                        else
-                        {
-                            StartOfRound.Instance.currentLevel.moldSpreadIterations = Mathf.Min(iterations, 2);
-                            Plugin.logSource.LogInfo($"Mold has never been seen on \"{StartOfRound.Instance.currentLevel.PlanetName}\" before, reset iterations");
-                        }
-                    }
-                }
-            }
-        }
-        [HarmonyPatch(typeof(StartOfRound), "ResetMoldStates")]
-        [HarmonyPostfix]
-        static void Post_ResetMoldStates(StartOfRound __instance)
-        {
-            if (!__instance.IsServer || StartOfRound.Instance.isChallengeFile)
-                return;
-
-            foreach (SelectableLevel level in __instance.levels)
-            {
-                ES3.DeleteKey($"YesFox_{level.name}_Success", GameNetworkManager.Instance.currentSaveFileName);
-                Plugin.logSource.LogDebug($"Reset mold growth success for \"{level.PlanetName}\" (ship reset)");
-            }
-        }
-        [HarmonyPatch(typeof(MoldSpreadManager), "CheckIfAllSporesDestroyed")]
-        [HarmonyPostfix]
-        static void Post_CheckIfAllSporesDestroyed(MoldSpreadManager __instance)
-        {
-            if (!__instance.IsServer || StartOfRound.Instance.isChallengeFile)
-                return;
-
-            if (StartOfRound.Instance.currentLevel.moldSpreadIterations < 1)
-            {
-                ES3.DeleteKey($"YesFox_{StartOfRound.Instance.currentLevel.name}_Success", GameNetworkManager.Instance.currentSaveFileName);
-                Plugin.logSource.LogDebug($"Reset mold growth success for \"{StartOfRound.Instance.currentLevel.PlanetName}\" (all spores destroyed)");
-            }
-        }
-        [HarmonyPatch(typeof(GameNetworkManager), "SaveGameValues")]
-        [HarmonyPostfix]
-        static void Post_SaveGameValues(GameNetworkManager __instance)
-        {
-            if (!__instance.isHostingGame)
-                return;
-
-            if (writeSuccessOnNextSave)
-            {
-                if (!GameNetworkManager.Instance.gameHasStarted && !StartOfRound.Instance.isChallengeFile)
-                    ES3.Save($"YesFox_{StartOfRound.Instance.currentLevel.name}_Success", true, GameNetworkManager.Instance.currentSaveFileName);
-
-                writeSuccessOnNextSave = false;
             }
         }
     }
