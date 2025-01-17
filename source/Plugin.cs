@@ -31,6 +31,7 @@ namespace YesFox
         internal static ConfigEntry<float> Shroud_SpawnChance_SameMoon;
         internal static ConfigEntry<float> Shroud_SpawnChance_OtherMoons;
         internal static ConfigEntry<int> Shroud_MaximumIterations;
+        internal static ConfigEntry<float> Shroud_MinimumDistance;
         internal static ConfigEntry<int> Fox_MinimumWeeds;
         internal static ConfigEntry<int> Fox_SpawnChance;
 
@@ -64,6 +65,8 @@ namespace YesFox
             Shroud_SpawnChance_SameMoon = Config.Bind("Weed Spawning", "Spawn Chance (Current Moon)", 8.5f, new ConfigDescription("What should the chance for them to initially spawn the moon you are routed to be? Weeds attempt to spawn on all moons when you go into orbit after each day.", new AcceptableValueRange<float>(0, 100)));
             Shroud_SpawnChance_OtherMoons = Config.Bind("Weed Spawning", "Spawn Chance (Other Moons)", 4f, new ConfigDescription("What should the chance for them to initially spawn on other moons be? Weeds attempt to spawn on all moons when you go into orbit after each day.", new AcceptableValueRange<float>(0, 100)));
             Shroud_MaximumIterations = Config.Bind("Weed Spawning", "Maximum Iterations", 20, new ConfigDescription("How many days in a row are additional weeds allowed to grow on the same moon?", new AcceptableValueRange<int>(1, 20)));
+            // absolute upper limit is 70.4927 (Experimentation's furthest valid distance at default settings)
+            Shroud_MinimumDistance = Config.Bind("Weed Spawning", "Minimum Distance", 40f, new ConfigDescription("How many units away from the ship must the starting points for weed growth be?", new AcceptableValueRange<float>(30f, 70f)));
 
             Fox_MinimumWeeds = Config.Bind("Fox Spawning", "Minimum Weeds", 31, "The minimum amount of weeds required to spawn");
             Fox_SpawnChance = Config.Bind("Fox Spawning", "Spawn Chance", -1, new ConfigDescription("What should the spawn chance be? If left as -1 then it will be the same as vanilla (a higher chance the more weeds there are)", new AcceptableValueRange<int>(-1, 100)));
@@ -203,9 +206,9 @@ namespace YesFox
             {
                 float shipDist = Vector3.Distance(outsideAINodes[i].transform.position, shipPos);
                 // greater than 40 units and selected randomly
-                if (shipDist >= 40f && (random.Next(100) < 13 || outsideAINodes.Length - i < 20))
+                if (shipDist >= Plugin.Shroud_MinimumDistance.Value && (random.Next(100) < 13 || outsideAINodes.Length - i < 20))
                 {
-                    Plugin.logSource.LogDebug($"Mold growth: outsideAINodes[{i}] is candidate (ship dist: {shipDist} > 40)");
+                    Plugin.logSource.LogDebug($"Mold growth: outsideAINodes[{i}] is candidate (ship dist: {shipDist} > {Plugin.Shroud_MinimumDistance.Value})");
                     // furthest distance in vanilla is on Artifice (7.88802)
                     if (Physics.Raycast(outsideAINodes[i].transform.position, Vector3.down, out RaycastHit hit, 8f, StartOfRound.Instance.collidersAndRoomMaskAndDefault, QueryTriggerInteraction.Ignore))
                     {
@@ -462,6 +465,44 @@ namespace YesFox
             if (__result && !GameObject.FindGameObjectWithTag("MoldAttractionPoint"))
             {
                 __instance.aggressivePosition = __instance.mostHiddenPosition;
+            }
+        }
+        // DEBUG
+        [HarmonyPatch(typeof(RoundManager), "InitializeRandomNumberGenerators")]
+        [HarmonyPostfix]
+        static void Post_InitializeRandomNumberGenerators(RoundManager __instance)
+        {
+            GameObject[] outsideAINodes = GameObject.FindGameObjectsWithTag("OutsideAINode");
+            if (outsideAINodes == null || outsideAINodes.Length < 1)
+                return;
+
+            Vector3 shipPos = new(1.27146339f, 0.278438568f, -7.5f); // StartOfRound.elevatorTransform position, when fully landed
+
+            outsideAINodes = [.. outsideAINodes.OrderBy(x => Vector3.Distance(x.transform.position, shipPos))];
+
+            MoldSpreadManager moldSpreadManager = Object.FindAnyObjectByType<MoldSpreadManager>();
+
+            bool validNodeInLast20 = false;
+            for (int i = outsideAINodes.Length - 19; i < outsideAINodes.Length; i++)
+            {
+                moldSpreadManager.RemoveAllMold();
+                moldSpreadManager.GenerateMold(outsideAINodes[i].transform.position, 20);
+                if (moldSpreadManager.generatedMold.Count >= 31)
+                {
+                    validNodeInLast20 = true;
+                    break;
+                }
+            }
+            Plugin.logSource.LogWarning($"{StartOfRound.Instance.currentLevel.name} valid start in last 20: {validNodeInLast20}");
+            for (int i = outsideAINodes.Length - 1; i >= 0; i--)
+            {
+                moldSpreadManager.RemoveAllMold();
+                moldSpreadManager.GenerateMold(outsideAINodes[i].transform.position, 20);
+                if (moldSpreadManager.generatedMold.Count >= 31)
+                {
+                    Plugin.logSource.LogWarning($"{StartOfRound.Instance.currentLevel.name} furthest valid distance: {Vector3.Distance(outsideAINodes[i].transform.position, shipPos)}");
+                    break;
+                }
             }
         }
     }
