@@ -445,6 +445,7 @@ namespace YesFox
         }
 
         // Fixes weeds resetting when they naturally fail to spawn
+        static bool writeSuccessOnNextSave;
         [HarmonyPatch(typeof(MoldSpreadManager), "GenerateMold")]
         [HarmonyPrefix]
         static void Pre_GenerateMold(MoldSpreadManager __instance, ref int __state)
@@ -455,7 +456,7 @@ namespace YesFox
         [HarmonyPostfix]
         static void Post_GenerateMold(MoldSpreadManager __instance, int __state, int iterations)
         {
-            if (iterations > 0)
+            if (iterations > 0 && !StartOfRound.Instance.isChallengeFile)
             {
                 if (__instance.iterationsThisDay > 0)
                 {
@@ -464,7 +465,7 @@ namespace YesFox
                         if (!ES3.Load($"YesFox_{StartOfRound.Instance.currentLevel.name}_Success", GameNetworkManager.Instance.currentSaveFileName, false))
                         {
                             // weed growth has succeeded at least one time for this planet
-                            ES3.Save($"YesFox_{StartOfRound.Instance.currentLevel.name}_Success", true, GameNetworkManager.Instance.currentSaveFileName);
+                            writeSuccessOnNextSave = true;
                             Plugin.logSource.LogDebug($"Mold growth on \"{StartOfRound.Instance.currentLevel.PlanetName}\" succeeded for first time");
                         }
                     }
@@ -479,6 +480,7 @@ namespace YesFox
                         {
                             StartOfRound.Instance.currentLevel.moldSpreadIterations = iterations;
                             StartOfRound.Instance.currentLevel.moldStartPosition = __state;
+                            Plugin.logSource.LogInfo($"Mold has been seen on \"{StartOfRound.Instance.currentLevel.PlanetName}\" before, previous values will be restored");
                         }
                         // since player hasn't seen weeds on this moon before, we can instead limit the iteration count, as if a new infestation sprung up after leaving
                         else
@@ -494,7 +496,7 @@ namespace YesFox
         [HarmonyPostfix]
         static void Post_ResetMoldStates(StartOfRound __instance)
         {
-            if (!__instance.IsServer)
+            if (!__instance.IsServer || StartOfRound.Instance.isChallengeFile)
                 return;
 
             foreach (SelectableLevel level in __instance.levels)
@@ -507,13 +509,28 @@ namespace YesFox
         [HarmonyPostfix]
         static void Post_CheckIfAllSporesDestroyed(MoldSpreadManager __instance)
         {
-            if (!__instance.IsServer)
+            if (!__instance.IsServer || StartOfRound.Instance.isChallengeFile)
                 return;
 
             if (StartOfRound.Instance.currentLevel.moldSpreadIterations < 1)
             {
                 ES3.DeleteKey($"YesFox_{StartOfRound.Instance.currentLevel.name}_Success", GameNetworkManager.Instance.currentSaveFileName);
                 Plugin.logSource.LogDebug($"Reset mold growth success for \"{StartOfRound.Instance.currentLevel.PlanetName}\" (all spores destroyed)");
+            }
+        }
+        [HarmonyPatch(typeof(GameNetworkManager), "SaveGameValues")]
+        [HarmonyPostfix]
+        static void Post_SaveGameValues(GameNetworkManager __instance)
+        {
+            if (!__instance.isHostingGame)
+                return;
+
+            if (writeSuccessOnNextSave)
+            {
+                if (!GameNetworkManager.Instance.gameHasStarted && !StartOfRound.Instance.isChallengeFile)
+                    ES3.Save($"YesFox_{StartOfRound.Instance.currentLevel.name}_Success", true, GameNetworkManager.Instance.currentSaveFileName);
+
+                writeSuccessOnNextSave = false;
             }
         }
     }
