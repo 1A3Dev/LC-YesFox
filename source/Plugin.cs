@@ -467,42 +467,23 @@ namespace YesFox
                 __instance.aggressivePosition = __instance.mostHiddenPosition;
             }
         }
-        // DEBUG
-        [HarmonyPatch(typeof(RoundManager), "InitializeRandomNumberGenerators")]
-        [HarmonyPostfix]
-        static void Post_InitializeRandomNumberGenerators(RoundManager __instance)
+
+        // Fixes weeds resetting when they naturally fail to spawn
+        [HarmonyPatch(typeof(MoldSpreadManager), "GenerateMold")]
+        [HarmonyPrefix]
+        static void Pre_GenerateMold(MoldSpreadManager __instance, ref int __state)
         {
-            GameObject[] outsideAINodes = GameObject.FindGameObjectsWithTag("OutsideAINode");
-            if (outsideAINodes == null || outsideAINodes.Length < 1)
-                return;
-
-            Vector3 shipPos = new(1.27146339f, 0.278438568f, -7.5f); // StartOfRound.elevatorTransform position, when fully landed
-
-            outsideAINodes = [.. outsideAINodes.OrderBy(x => Vector3.Distance(x.transform.position, shipPos))];
-
-            MoldSpreadManager moldSpreadManager = Object.FindAnyObjectByType<MoldSpreadManager>();
-
-            bool validNodeInLast20 = false;
-            for (int i = outsideAINodes.Length - 19; i < outsideAINodes.Length; i++)
+            __state = StartOfRound.Instance.currentLevel.moldStartPosition;
+        }
+        [HarmonyPatch(typeof(MoldSpreadManager), "GenerateMold")]
+        [HarmonyPostfix]
+        static void Post_GenerateMold(MoldSpreadManager __instance, int __state, int iterations)
+        {
+            if (__instance.iterationsThisDay < 1 && iterations > 0)
             {
-                moldSpreadManager.RemoveAllMold();
-                moldSpreadManager.GenerateMold(outsideAINodes[i].transform.position, 20);
-                if (moldSpreadManager.generatedMold.Count >= 31)
-                {
-                    validNodeInLast20 = true;
-                    break;
-                }
-            }
-            Plugin.logSource.LogWarning($"{StartOfRound.Instance.currentLevel.name} valid start in last 20: {validNodeInLast20}");
-            for (int i = outsideAINodes.Length - 1; i >= 0; i--)
-            {
-                moldSpreadManager.RemoveAllMold();
-                moldSpreadManager.GenerateMold(outsideAINodes[i].transform.position, 20);
-                if (moldSpreadManager.generatedMold.Count >= 31)
-                {
-                    Plugin.logSource.LogWarning($"{StartOfRound.Instance.currentLevel.name} furthest valid distance: {Vector3.Distance(outsideAINodes[i].transform.position, shipPos)}");
-                    break;
-                }
+                Plugin.logSource.LogInfo($"Mold growth on \"{StartOfRound.Instance.currentLevel.PlanetName}\" erroneously reset from {iterations} iterations");
+                StartOfRound.Instance.currentLevel.moldSpreadIterations = iterations;
+                StartOfRound.Instance.currentLevel.moldStartPosition = __state;
             }
         }
     }
