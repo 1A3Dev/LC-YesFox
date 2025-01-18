@@ -11,6 +11,7 @@ using System.Reflection;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.AI;
+using static Unity.Audio.Handle;
 using Object = UnityEngine.Object;
 
 namespace YesFox
@@ -30,6 +31,7 @@ namespace YesFox
         internal static ConfigEntry<float> Shroud_SpawnChance_SameMoon;
         internal static ConfigEntry<float> Shroud_SpawnChance_OtherMoons;
         internal static ConfigEntry<int> Shroud_MaximumIterations;
+        internal static ConfigEntry<float> Shroud_MinimumDistance;
         internal static ConfigEntry<int> Fox_MinimumWeeds;
         internal static ConfigEntry<int> Fox_SpawnChance;
 
@@ -63,6 +65,8 @@ namespace YesFox
             Shroud_SpawnChance_SameMoon = Config.Bind("Weed Spawning", "Spawn Chance (Current Moon)", 8.5f, new ConfigDescription("What should the chance for them to initially spawn the moon you are routed to be? Weeds attempt to spawn on all moons when you go into orbit after each day.", new AcceptableValueRange<float>(0, 100)));
             Shroud_SpawnChance_OtherMoons = Config.Bind("Weed Spawning", "Spawn Chance (Other Moons)", 4f, new ConfigDescription("What should the chance for them to initially spawn on other moons be? Weeds attempt to spawn on all moons when you go into orbit after each day.", new AcceptableValueRange<float>(0, 100)));
             Shroud_MaximumIterations = Config.Bind("Weed Spawning", "Maximum Iterations", 20, new ConfigDescription("How many days in a row are additional weeds allowed to grow on the same moon?", new AcceptableValueRange<int>(1, 20)));
+            // absolute upper limit is 70.4927 (Experimentation's furthest valid distance at default settings)
+            Shroud_MinimumDistance = Config.Bind("Weed Spawning", "Minimum Distance", 40f, new ConfigDescription("How many units away from the ship must the starting points for weed growth be?", new AcceptableValueRange<float>(30f, 70f)));
 
             Fox_MinimumWeeds = Config.Bind("Fox Spawning", "Minimum Weeds", 31, "The minimum amount of weeds required to spawn");
             Fox_SpawnChance = Config.Bind("Fox Spawning", "Spawn Chance", -1, new ConfigDescription("What should the spawn chance be? If left as -1 then it will be the same as vanilla (a higher chance the more weeds there are)", new AcceptableValueRange<int>(-1, 100)));
@@ -160,6 +164,13 @@ namespace YesFox
             if (!__instance.IsServer || __instance.currentLevel.moldSpreadIterations < 1)
                 return;
 
+            if (!__instance.currentLevel.canSpawnMold && !Plugin.Shroud_AllMoons.Value)
+            {
+                __instance.currentLevel.moldSpreadIterations = 0;
+                __instance.currentLevel.moldStartPosition = -1;
+                return;
+            }
+
             // retroactively apply iteration cap to old save files
             if (__instance.currentLevel.moldSpreadIterations > Plugin.Shroud_MaximumIterations.Value)
             {
@@ -180,32 +191,52 @@ namespace YesFox
                 float shipDist = Vector3.Distance(outsideAINodes[__instance.currentLevel.moldStartPosition].transform.position, shipPos);
 
                 // spot chosen is already an acceptable distance from the ship
-                if (shipDist >= 40f)
+                if (shipDist >= 30f)
                     return;
 
-                Plugin.logSource.LogInfo($"Mold growth is starting from node #{__instance.currentLevel.moldStartPosition} which is too close to the ship ({shipDist} < 40)");
+                Plugin.logSource.LogInfo($"Mold growth is starting from node #{__instance.currentLevel.moldStartPosition} which is too close to the ship ({shipDist} < 30)");
             }
 
             // starting point has not been chosen, or was invalid
 
-            GameObject[] validSpots = outsideAINodes.Where(outsideAINode => Vector3.Distance(outsideAINode.transform.position, shipPos) >= 40f).ToArray();
-            if (validSpots.Length < 1)
+            System.Random random = new System.Random(__instance.randomMapSeed + 2017);
+            MoldSpreadManager moldSpreadManager = Object.FindAnyObjectByType<MoldSpreadManager>();
+            int temp = __instance.currentLevel.moldSpreadIterations; // preserve
+            for (int i = 0; i < outsideAINodes.Length; i++)
             {
-                // custom level; try shrinking range
-                validSpots = outsideAINodes.Where(outsideAINode => Vector3.Distance(outsideAINode.transform.position, shipPos) >= 35f).ToArray();
-                if (validSpots.Length < 1)
+                float shipDist = Vector3.Distance(outsideAINodes[i].transform.position, shipPos);
+                // greater than 40 units and selected randomly
+                if (shipDist >= Plugin.Shroud_MinimumDistance.Value && (random.Next(100) < 13 || outsideAINodes.Length - i < 20))
                 {
-                    // level is just too small
-                    Plugin.logSource.LogInfo($"Level \"{__instance.currentLevel.PlanetName}\" has no AI nodes at a valid distance");
-                    __instance.currentLevel.moldSpreadIterations = 0;
-                    __instance.currentLevel.moldStartPosition = -1;
-                    return;
+                    Plugin.logSource.LogDebug($"Mold growth: outsideAINodes[{i}] is candidate (ship dist: {shipDist} > {Plugin.Shroud_MinimumDistance.Value})");
+                    // furthest distance in vanilla is on Artifice (7.88802)
+                    if (Physics.Raycast(outsideAINodes[i].transform.position, Vector3.down, out RaycastHit hit, 8f, StartOfRound.Instance.collidersAndRoomMaskAndDefault, QueryTriggerInteraction.Ignore))
+                    {
+                        // final test... can the fox spawn here?
+
+                        // must simulate weed growth, there aren't any shortcuts for this
+                        moldSpreadManager.GenerateMold(outsideAINodes[i].transform.position, Plugin.Shroud_MaximumIterations.Value);
+                        int amt = moldSpreadManager.generatedMold.Count;
+                        moldSpreadManager.RemoveAllMold();
+
+                        if (amt >= Plugin.Fox_MinimumWeeds.Value)
+                        {
+                            __instance.currentLevel.moldStartPosition = i;
+                            __instance.currentLevel.moldSpreadIterations = temp;
+                            Plugin.logSource.LogInfo($"Mold growth: Selected outsideAINodes[{i}]: coords {outsideAINodes[i].transform.position}, dist {shipDist}");
+                            return;
+                        }
+                        else
+                            Plugin.logSource.LogDebug($"Mold growth: outsideAINodes[{i}] rejected (max weeds: {amt} < {Plugin.Fox_MinimumWeeds.Value})");
+                    }
+                    else
+                        Plugin.logSource.LogDebug($"Mold growth: outsideAINodes[{i}] rejected (no ground)");
                 }
             }
 
-            __instance.currentLevel.moldStartPosition = System.Array.IndexOf(outsideAINodes, validSpots[new System.Random(__instance.randomMapSeed + 2017).Next(validSpots.Length)]);
-
-            Plugin.logSource.LogInfo($"Mold growth: Selected node #{__instance.currentLevel.moldStartPosition}: coords {outsideAINodes[__instance.currentLevel.moldStartPosition].transform.position}, dist {Vector3.Distance(outsideAINodes[__instance.currentLevel.moldStartPosition].transform.position, shipPos)}");
+            __instance.currentLevel.moldSpreadIterations = 0;
+            __instance.currentLevel.moldStartPosition = -1;
+            Plugin.logSource.LogInfo($"Level \"{__instance.currentLevel.PlanetName}\" has no valid AI nodes");
         }
 
         // v64
@@ -434,6 +465,25 @@ namespace YesFox
             if (__result && !GameObject.FindGameObjectWithTag("MoldAttractionPoint"))
             {
                 __instance.aggressivePosition = __instance.mostHiddenPosition;
+            }
+        }
+
+        // Fixes weeds resetting when they naturally fail to spawn
+        [HarmonyPatch(typeof(MoldSpreadManager), "GenerateMold")]
+        [HarmonyPrefix]
+        static void Pre_GenerateMold(MoldSpreadManager __instance, ref int __state)
+        {
+            __state = StartOfRound.Instance.currentLevel.moldStartPosition;
+        }
+        [HarmonyPatch(typeof(MoldSpreadManager), "GenerateMold")]
+        [HarmonyPostfix]
+        static void Post_GenerateMold(MoldSpreadManager __instance, int __state, int iterations)
+        {
+            if (__instance.iterationsThisDay < 1 && iterations > 0)
+            {
+                Plugin.logSource.LogInfo($"Mold growth on \"{StartOfRound.Instance.currentLevel.PlanetName}\" erroneously reset from {iterations} iterations");
+                StartOfRound.Instance.currentLevel.moldSpreadIterations = iterations;
+                StartOfRound.Instance.currentLevel.moldStartPosition = __state;
             }
         }
     }
