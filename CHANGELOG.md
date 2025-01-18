@@ -1,3 +1,7 @@
+### 1.1.0
+
+- Fixed the logic for choosing the start position of vain shrouds
+
 ### 1.0.9
 
 - Config setting to cap the number of weed iterations generated
