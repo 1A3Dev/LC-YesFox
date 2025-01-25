@@ -11,7 +11,6 @@ using System.Reflection;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.AI;
-using static Unity.Audio.Handle;
 using Object = UnityEngine.Object;
 
 namespace YesFox
@@ -25,7 +24,6 @@ namespace YesFox
 
         internal static List<GameObject> _networkPrefabs = new List<GameObject>();
         public static GameObject BushWolfAddonPrefab { get; internal set; }
-        public static EnemyType BushWolfEnemyType { get; internal set; }
 
         internal static ConfigEntry<bool> Shroud_AllMoons;
         internal static ConfigEntry<float> Shroud_SpawnChance_SameMoon;
@@ -257,7 +255,7 @@ namespace YesFox
 
             try
             {
-                EnemyType bushWolfTypeOrig = Resources.FindObjectsOfTypeAll<EnemyType>().FirstOrDefault(x => x.name == "BushWolf" && x.enemyPrefab != Plugin.BushWolfAddonPrefab);
+                EnemyType bushWolfTypeOrig = Object.FindFirstObjectByType<QuickMenuManager>()?.testAllEnemiesLevel?.OutsideEnemies.FirstOrDefault(x => x.enemyType.name == "BushWolf" && x.enemyType.enemyPrefab?.GetComponentsInChildren<SkinnedMeshRenderer>()?.Length > 0)?.enemyType;
                 EnemyType bushWolfTypeAddon = Resources.FindObjectsOfTypeAll<EnemyType>().FirstOrDefault(x => x.name == "BushWolf" && x.enemyPrefab == Plugin.BushWolfAddonPrefab);
                 if (bushWolfTypeOrig != bushWolfTypeAddon)
                 {

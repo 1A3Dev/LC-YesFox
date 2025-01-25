@@ -1,3 +1,7 @@
+### 1.1.1
+
+- Fixed some mods causing YesFox to have an exception when overwriting the addon fox's materials with the vanilla ones
+
 ### 1.1.0
 
 - Fixed the logic for choosing the start position of vain shrouds
