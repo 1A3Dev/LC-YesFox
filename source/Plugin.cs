@@ -28,6 +28,8 @@ namespace YesFox
         internal static ConfigEntry<bool> Shroud_AllMoons;
         internal static ConfigEntry<float> Shroud_SpawnChance_SameMoon;
         internal static ConfigEntry<float> Shroud_SpawnChance_OtherMoons;
+        internal static ConfigEntry<float> Shroud_GrowChance_SameMoon;
+        internal static ConfigEntry<float> Shroud_GrowChance_OtherMoons;
         internal static ConfigEntry<int> Shroud_MaximumIterations;
         internal static ConfigEntry<float> Shroud_MinimumDistance;
         internal static ConfigEntry<int> Fox_MinimumWeeds;
@@ -62,6 +64,8 @@ namespace YesFox
             Shroud_AllMoons = Config.Bind("Weed Spawning", "All Moons", false, "Should weeds be able to spawn on all moons excluding gordion?");
             Shroud_SpawnChance_SameMoon = Config.Bind("Weed Spawning", "Spawn Chance (Current Moon)", 8.5f, new ConfigDescription("What should the chance for them to initially spawn the moon you are routed to be? Weeds attempt to spawn on all moons when you go into orbit after each day.", new AcceptableValueRange<float>(0, 100)));
             Shroud_SpawnChance_OtherMoons = Config.Bind("Weed Spawning", "Spawn Chance (Other Moons)", 4f, new ConfigDescription("What should the chance for them to initially spawn on other moons be? Weeds attempt to spawn on all moons when you go into orbit after each day.", new AcceptableValueRange<float>(0, 100)));
+            Shroud_GrowChance_SameMoon = Config.Bind("Weed Spawning", "Growth Chance (Current Moon)", 100f, new ConfigDescription("What is the chance that weeds should grow another \"step\" after leaving a moon? This applies at the end of the day, only once the spawn chance has succeeded for the first time.", new AcceptableValueRange<float>(0, 100)));
+            Shroud_GrowChance_OtherMoons = Config.Bind("Weed Spawning", "Growth Chance (Other Moons)", 100f, new ConfigDescription("What is the chance that weeds should grow another \"step\" for all other moons? This applies at the end of the day, only once the spawn chance has succeeded for the first time.", new AcceptableValueRange<float>(0, 100)));
             Shroud_MaximumIterations = Config.Bind("Weed Spawning", "Maximum Iterations", 20, new ConfigDescription("How many days in a row are additional weeds allowed to grow on the same moon?", new AcceptableValueRange<int>(1, 20)));
             // absolute upper limit is 70.4927 (Experimentation's furthest valid distance at default settings)
             Shroud_MinimumDistance = Config.Bind("Weed Spawning", "Minimum Distance", 40f, new ConfigDescription("How many units away from the ship must the starting points for weed growth be?", new AcceptableValueRange<float>(30f, 70f)));
@@ -121,8 +125,12 @@ namespace YesFox
                 {
                     if (__instance.levels[i].moldSpreadIterations < Plugin.Shroud_MaximumIterations.Value)
                     {
-                        __instance.levels[i].moldSpreadIterations++;
-                        Plugin.logSource.LogInfo($"Increasing level #{i} {__instance.levels[i].PlanetName} mold iterations by 1; risen to {__instance.levels[i].moldSpreadIterations}");
+                        float chance = (__instance.levels[i] == __instance.currentLevel ? Plugin.Shroud_GrowChance_SameMoon.Value : Plugin.Shroud_GrowChance_OtherMoons.Value) / 100f;
+                        if (random.NextDouble() <= chance)
+                        {
+                            __instance.levels[i].moldSpreadIterations++;
+                            Plugin.logSource.LogInfo($"Increasing level #{i} {__instance.levels[i].PlanetName} mold iterations by 1; risen to {__instance.levels[i].moldSpreadIterations}");
+                        }
                     }
                     continue;
                 }
