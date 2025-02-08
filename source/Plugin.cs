@@ -105,6 +105,18 @@ namespace YesFox
             }
         }
 
+        static MoldSpreadManager _moldSpreadManager;
+        static MoldSpreadManager MoldSpreadManager
+        {
+            get
+            {
+                if (_moldSpreadManager == null)
+                    _moldSpreadManager = Object.FindAnyObjectByType<MoldSpreadManager>();
+
+                return _moldSpreadManager;
+            }
+        }
+
         [HarmonyPatch(typeof(StartOfRound), "SetPlanetsMold")]
         [HarmonyPrefix]
         public static bool SetPlanetsMold(StartOfRound __instance)
@@ -206,7 +218,6 @@ namespace YesFox
             // starting point has not been chosen, or was invalid
 
             System.Random random = new System.Random(__instance.randomMapSeed + 2017);
-            MoldSpreadManager moldSpreadManager = Object.FindAnyObjectByType<MoldSpreadManager>();
             int temp = __instance.currentLevel.moldSpreadIterations; // preserve
             for (int i = 0; i < outsideAINodes.Length; i++)
             {
@@ -221,9 +232,9 @@ namespace YesFox
                         // final test... can the fox spawn here?
 
                         // must simulate weed growth, there aren't any shortcuts for this
-                        moldSpreadManager.GenerateMold(outsideAINodes[i].transform.position, Plugin.Shroud_MaximumIterations.Value);
-                        int amt = moldSpreadManager.generatedMold.Count;
-                        moldSpreadManager.RemoveAllMold();
+                        MoldSpreadManager.GenerateMold(outsideAINodes[i].transform.position, Plugin.Shroud_MaximumIterations.Value);
+                        int amt = MoldSpreadManager.generatedMold.Count;
+                        MoldSpreadManager.RemoveAllMold();
 
                         if (amt >= Plugin.Fox_MinimumWeeds.Value)
                         {
@@ -320,11 +331,10 @@ namespace YesFox
 
         public static void SpawnWeedEnemies(int currentHour)
         {
-            MoldSpreadManager moldSpreadManager = Object.FindAnyObjectByType<MoldSpreadManager>();
             int num = 0;
-            if (moldSpreadManager != null)
+            if (MoldSpreadManager != null)
             {
-                num = moldSpreadManager.generatedMold.Count(x => x != null && x.activeSelf);
+                num = MoldSpreadManager.generatedMold.Count(x => x != null && x.activeSelf);
             }
             if (num < Plugin.Fox_MinimumWeeds.Value)
             {
@@ -453,13 +463,12 @@ namespace YesFox
             if (___nearbyColliders != null && ___nearbyColliders.Length > 10)
                 return;
 
-            MoldSpreadManager moldSpreadManager = Object.FindAnyObjectByType<MoldSpreadManager>();
-            if (moldSpreadManager?.generatedMold == null)
+            if (MoldSpreadManager?.generatedMold == null)
                 return;
 
-            if (___nearbyColliders == null || moldSpreadManager.generatedMold.Count > ___nearbyColliders.Length)
+            if (___nearbyColliders == null || MoldSpreadManager.generatedMold.Count > ___nearbyColliders.Length)
             {
-                ___nearbyColliders = new Collider[moldSpreadManager.generatedMold.Count];
+                ___nearbyColliders = new Collider[MoldSpreadManager.generatedMold.Count];
             }
         }
 
@@ -491,6 +500,15 @@ namespace YesFox
                 StartOfRound.Instance.currentLevel.moldSpreadIterations = iterations;
                 StartOfRound.Instance.currentLevel.moldStartPosition = __state;
             }
+        }
+
+        // caching
+        [HarmonyPatch(typeof(MoldSpreadManager), "Start")]
+        [HarmonyPostfix]
+        static void MoldSpreadManager_Start(MoldSpreadManager __instance)
+        {
+            if (_moldSpreadManager == null)
+                _moldSpreadManager = __instance;
         }
     }
 }
