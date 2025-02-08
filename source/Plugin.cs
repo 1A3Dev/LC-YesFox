@@ -112,7 +112,7 @@ namespace YesFox
             if (!__instance.IsOwner) return false;
 
             System.Random random = new System.Random(__instance.randomMapSeed + 32);
-            Terminal terminal = Object.FindFirstObjectByType<Terminal>();
+            Terminal terminal = Object.FindAnyObjectByType<Terminal>();
             for (int i = 0; i < __instance.levels.Length; i++)
             {
                 if (i == 3 || (!__instance.levels[i].canSpawnMold && !Plugin.Shroud_AllMoons.Value))
@@ -263,7 +263,7 @@ namespace YesFox
 
             try
             {
-                EnemyType bushWolfTypeOrig = Object.FindFirstObjectByType<QuickMenuManager>()?.testAllEnemiesLevel?.OutsideEnemies.FirstOrDefault(x => x.enemyType.name == "BushWolf" && x.enemyType.enemyPrefab?.GetComponentsInChildren<SkinnedMeshRenderer>()?.Length > 0)?.enemyType;
+                EnemyType bushWolfTypeOrig = Object.FindAnyObjectByType<QuickMenuManager>()?.testAllEnemiesLevel?.OutsideEnemies.FirstOrDefault(x => x.enemyType.name == "BushWolf" && x.enemyType.enemyPrefab?.GetComponentsInChildren<SkinnedMeshRenderer>()?.Length > 0)?.enemyType;
                 EnemyType bushWolfTypeAddon = Resources.FindObjectsOfTypeAll<EnemyType>().FirstOrDefault(x => x.name == "BushWolf" && x.enemyPrefab == Plugin.BushWolfAddonPrefab);
                 if (bushWolfTypeOrig != bushWolfTypeAddon)
                 {
@@ -320,7 +320,7 @@ namespace YesFox
 
         public static void SpawnWeedEnemies(int currentHour)
         {
-            MoldSpreadManager moldSpreadManager = Object.FindFirstObjectByType<MoldSpreadManager>();
+            MoldSpreadManager moldSpreadManager = Object.FindAnyObjectByType<MoldSpreadManager>();
             int num = 0;
             if (moldSpreadManager != null)
             {
@@ -453,7 +453,7 @@ namespace YesFox
             if (___nearbyColliders != null && ___nearbyColliders.Length > 10)
                 return;
 
-            MoldSpreadManager moldSpreadManager = Object.FindFirstObjectByType<MoldSpreadManager>();
+            MoldSpreadManager moldSpreadManager = Object.FindAnyObjectByType<MoldSpreadManager>();
             if (moldSpreadManager?.generatedMold == null)
                 return;
 
