@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Reflection.Emit;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.AI;
@@ -509,6 +510,39 @@ namespace YesFox
         {
             if (_moldSpreadManager == null)
                 _moldSpreadManager = __instance;
+        }
+
+        static VehicleController vehicleController;
+        [HarmonyPatch(typeof(VehicleController), "Awake")]
+        [HarmonyPostfix]
+        static void VehicleController_Awake(VehicleController __instance)
+        {
+            if (vehicleController == null)
+                vehicleController = __instance;
+        }
+
+        [HarmonyPatch(typeof(BushWolfEnemy), nameof(BushWolfEnemy.Update))]
+        [HarmonyTranspiler]
+        static IEnumerable<CodeInstruction> CacheVehicleController(IEnumerable<CodeInstruction> instructions)
+        {
+            List<CodeInstruction> codes = instructions.ToList();
+
+            for (int i = 0; i < codes.Count; i++)
+            {
+                if (codes[i].opcode == OpCodes.Call)
+                {
+                    string methodName = codes[i].operand.ToString();
+                    if (methodName.Contains("FindObjectOfType") && methodName.Contains("VehicleController"))
+                    {
+                        codes[i].opcode = OpCodes.Ldsfld;
+                        codes[i].operand = AccessTools.Field(typeof(HarmonyPatches), nameof(vehicleController));
+                        Plugin.logSource.LogDebug($"Use cached VehicleController in Kidnapper Fox AI");
+                        break;
+                    }
+                }
+            }
+
+            return instructions;
         }
     }
 }
