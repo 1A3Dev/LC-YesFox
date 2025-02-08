@@ -586,8 +586,18 @@ namespace YesFox
             return codes;
         }
 
+        public static GameObject[] FindMoldSpores()
+        {
+            if (MoldSpreadManager?.generatedMold == null)
+                return GameObject.FindGameObjectsWithTag("MoldSpore");
+
+            return MoldSpreadManager.generatedMold.Where(x => x != null && x.activeSelf).ToArray();
+        }
+
         static readonly MethodInfo MOLD_ATTRACTION_POINT = AccessTools.DeclaredPropertyGetter(typeof(HarmonyPatches), nameof(MoldAttractionPoint));
+        static readonly MethodInfo FIND_MOLD_SPORES = AccessTools.Method(typeof(HarmonyPatches), nameof(FindMoldSpores));
         static readonly MethodInfo FIND_GAME_OBJECT_WITH_TAG = AccessTools.Method(typeof(GameObject), nameof(GameObject.FindGameObjectWithTag));
+        static readonly MethodInfo FIND_GAME_OBJECTS_WITH_TAG = AccessTools.Method(typeof(GameObject), nameof(GameObject.FindGameObjectsWithTag));
         [HarmonyPatch(typeof(MoldSpreadManager), "GenerateMold")]
         [HarmonyPatch(typeof(BushWolfEnemy), nameof(BushWolfEnemy.GetBiggestWeedPatch))]
         [HarmonyTranspiler]
@@ -597,7 +607,6 @@ namespace YesFox
 
             for (int i = 1; i < codes.Count; i++)
             {
-                Plugin.logSource.LogInfo(codes[i]);
                 if (codes[i].opcode == OpCodes.Call)
                 {
                     MethodInfo methodInfo = codes[i].operand as MethodInfo; // constructors apparently cause problems if you just cast with (MethodInfo)
@@ -607,14 +616,21 @@ namespace YesFox
 
                         // would remove instead, but that breaks labels in GetBiggestWeedPatch, and probably isn't worth fixing
                         codes[i - 1].opcode = OpCodes.Nop;
+                        //codes[i - 1].operand = null;
 
                         Plugin.logSource.LogDebug($"Use cached MoldAttractionPoint in {__originalMethod.DeclaringType}.{__originalMethod.Name}");
                     }
+                    else if (methodInfo == FIND_GAME_OBJECTS_WITH_TAG && codes[i - 1].opcode == OpCodes.Ldstr && (string)codes[i - 1].operand == "MoldSpore")
+                    {
+                        codes[i].operand = FIND_MOLD_SPORES;
+
+                        codes[i - 1].opcode = OpCodes.Nop;
+                        //codes[i - 1].operand = null;
+
+                        Plugin.logSource.LogDebug($"Use cached MoldSpore game objects in {__originalMethod.DeclaringType}.{__originalMethod.Name}");
+                    }
                 }
             }
-
-            foreach (CodeInstruction code in instructions)
-                Plugin.logSource.LogInfo(code);
 
             //Plugin.Logger.LogWarning($"{__originalMethod.Name} transpiler failed");
             return codes;
