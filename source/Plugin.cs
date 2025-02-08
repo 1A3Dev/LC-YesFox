@@ -473,12 +473,24 @@ namespace YesFox
             }
         }
 
+        static GameObject _moldAttractionPoint;
+        static GameObject MoldAttractionPoint
+        {
+            get
+            {
+                if (_moldAttractionPoint == null)
+                    _moldAttractionPoint = GameObject.FindGameObjectWithTag("MoldAttractionPoint");
+
+                return _moldAttractionPoint;
+            }
+        }
+
         // Fixed aggressivePosition not being set if there isn't a MoldAttractionPoint
         [HarmonyPatch(typeof(BushWolfEnemy), "GetBiggestWeedPatch")]
         [HarmonyPostfix]
         public static void Post_GetBiggestWeedPatch(BushWolfEnemy __instance, bool __result)
         {
-            if (__result && !GameObject.FindGameObjectWithTag("MoldAttractionPoint"))
+            if (__result && MoldAttractionPoint == null)
             {
                 __instance.aggressivePosition = __instance.mostHiddenPosition;
             }
@@ -542,7 +554,7 @@ namespace YesFox
                 }
             }
 
-            return instructions;
+            return codes;
         }
 
         static readonly MethodInfo MOLD_SPREAD_MANAGER_INSTANCE = AccessTools.DeclaredPropertyGetter(typeof(HarmonyPatches), nameof(MoldSpreadManager));
@@ -571,7 +583,41 @@ namespace YesFox
             }
 
             //Plugin.Logger.LogWarning($"{__originalMethod.Name} transpiler failed");
-            return instructions;
+            return codes;
+        }
+
+        static readonly MethodInfo MOLD_ATTRACTION_POINT = AccessTools.DeclaredPropertyGetter(typeof(HarmonyPatches), nameof(MoldAttractionPoint));
+        static readonly MethodInfo FIND_GAME_OBJECT_WITH_TAG = AccessTools.Method(typeof(GameObject), nameof(GameObject.FindGameObjectWithTag));
+        [HarmonyPatch(typeof(MoldSpreadManager), "GenerateMold")]
+        [HarmonyPatch(typeof(BushWolfEnemy), nameof(BushWolfEnemy.GetBiggestWeedPatch))]
+        [HarmonyTranspiler]
+        static IEnumerable<CodeInstruction> CacheMoldGameObjects(IEnumerable<CodeInstruction> instructions, MethodBase __originalMethod)
+        {
+            List<CodeInstruction> codes = instructions.ToList();
+
+            for (int i = 1; i < codes.Count; i++)
+            {
+                Plugin.logSource.LogInfo(codes[i]);
+                if (codes[i].opcode == OpCodes.Call)
+                {
+                    MethodInfo methodInfo = codes[i].operand as MethodInfo; // constructors apparently cause problems if you just cast with (MethodInfo)
+                    if (methodInfo == FIND_GAME_OBJECT_WITH_TAG && codes[i - 1].opcode == OpCodes.Ldstr && (string)codes[i - 1].operand == "MoldAttractionPoint")
+                    {
+                        codes[i].operand = MOLD_ATTRACTION_POINT;
+
+                        // would remove instead, but that breaks labels in GetBiggestWeedPatch, and probably isn't worth fixing
+                        codes[i - 1].opcode = OpCodes.Nop;
+
+                        Plugin.logSource.LogDebug($"Use cached MoldAttractionPoint in {__originalMethod.DeclaringType}.{__originalMethod.Name}");
+                    }
+                }
+            }
+
+            foreach (CodeInstruction code in instructions)
+                Plugin.logSource.LogInfo(code);
+
+            //Plugin.Logger.LogWarning($"{__originalMethod.Name} transpiler failed");
+            return codes;
         }
     }
 }
