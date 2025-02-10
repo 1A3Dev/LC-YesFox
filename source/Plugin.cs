@@ -8,6 +8,7 @@ using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Reflection;
+using System.Reflection.Emit;
 using Unity.Netcode;
 using UnityEngine;
 using UnityEngine.AI;
@@ -28,6 +29,8 @@ namespace YesFox
         internal static ConfigEntry<bool> Shroud_AllMoons;
         internal static ConfigEntry<float> Shroud_SpawnChance_SameMoon;
         internal static ConfigEntry<float> Shroud_SpawnChance_OtherMoons;
+        internal static ConfigEntry<float> Shroud_GrowChance_SameMoon;
+        internal static ConfigEntry<float> Shroud_GrowChance_OtherMoons;
         internal static ConfigEntry<int> Shroud_MaximumIterations;
         internal static ConfigEntry<float> Shroud_MinimumDistance;
         internal static ConfigEntry<int> Fox_MinimumWeeds;
@@ -62,6 +65,8 @@ namespace YesFox
             Shroud_AllMoons = Config.Bind("Weed Spawning", "All Moons", false, "Should weeds be able to spawn on all moons excluding gordion?");
             Shroud_SpawnChance_SameMoon = Config.Bind("Weed Spawning", "Spawn Chance (Current Moon)", 8.5f, new ConfigDescription("What should the chance for them to initially spawn the moon you are routed to be? Weeds attempt to spawn on all moons when you go into orbit after each day.", new AcceptableValueRange<float>(0, 100)));
             Shroud_SpawnChance_OtherMoons = Config.Bind("Weed Spawning", "Spawn Chance (Other Moons)", 4f, new ConfigDescription("What should the chance for them to initially spawn on other moons be? Weeds attempt to spawn on all moons when you go into orbit after each day.", new AcceptableValueRange<float>(0, 100)));
+            Shroud_GrowChance_SameMoon = Config.Bind("Weed Spawning", "Growth Chance (Current Moon)", 100f, new ConfigDescription("What is the chance that weeds should grow another \"step\" after leaving a moon? This applies at the end of the day, only once the spawn chance has succeeded for the first time.", new AcceptableValueRange<float>(0, 100)));
+            Shroud_GrowChance_OtherMoons = Config.Bind("Weed Spawning", "Growth Chance (Other Moons)", 100f, new ConfigDescription("What is the chance that weeds should grow another \"step\" for all other moons? This applies at the end of the day, only once the spawn chance has succeeded for the first time.", new AcceptableValueRange<float>(0, 100)));
             Shroud_MaximumIterations = Config.Bind("Weed Spawning", "Maximum Iterations", 20, new ConfigDescription("How many days in a row are additional weeds allowed to grow on the same moon?", new AcceptableValueRange<int>(1, 20)));
             // absolute upper limit is 70.4927 (Experimentation's furthest valid distance at default settings)
             Shroud_MinimumDistance = Config.Bind("Weed Spawning", "Minimum Distance", 40f, new ConfigDescription("How many units away from the ship must the starting points for weed growth be?", new AcceptableValueRange<float>(30f, 70f)));
@@ -101,6 +106,18 @@ namespace YesFox
             }
         }
 
+        static MoldSpreadManager _moldSpreadManager;
+        static MoldSpreadManager MoldSpreadManager
+        {
+            get
+            {
+                if (_moldSpreadManager == null)
+                    _moldSpreadManager = Object.FindAnyObjectByType<MoldSpreadManager>();
+
+                return _moldSpreadManager;
+            }
+        }
+
         [HarmonyPatch(typeof(StartOfRound), "SetPlanetsMold")]
         [HarmonyPrefix]
         public static bool SetPlanetsMold(StartOfRound __instance)
@@ -108,7 +125,7 @@ namespace YesFox
             if (!__instance.IsOwner) return false;
 
             System.Random random = new System.Random(__instance.randomMapSeed + 32);
-            Terminal terminal = Object.FindFirstObjectByType<Terminal>();
+            Terminal terminal = Object.FindAnyObjectByType<Terminal>();
             for (int i = 0; i < __instance.levels.Length; i++)
             {
                 if (i == 3 || (!__instance.levels[i].canSpawnMold && !Plugin.Shroud_AllMoons.Value))
@@ -121,8 +138,12 @@ namespace YesFox
                 {
                     if (__instance.levels[i].moldSpreadIterations < Plugin.Shroud_MaximumIterations.Value)
                     {
-                        __instance.levels[i].moldSpreadIterations++;
-                        Plugin.logSource.LogInfo($"Increasing level #{i} {__instance.levels[i].PlanetName} mold iterations by 1; risen to {__instance.levels[i].moldSpreadIterations}");
+                        float chance = (__instance.levels[i] == __instance.currentLevel ? Plugin.Shroud_GrowChance_SameMoon.Value : Plugin.Shroud_GrowChance_OtherMoons.Value) / 100f;
+                        if (random.NextDouble() <= chance)
+                        {
+                            __instance.levels[i].moldSpreadIterations++;
+                            Plugin.logSource.LogInfo($"Increasing level #{i} {__instance.levels[i].PlanetName} mold iterations by 1; risen to {__instance.levels[i].moldSpreadIterations}");
+                        }
                     }
                     continue;
                 }
@@ -198,7 +219,6 @@ namespace YesFox
             // starting point has not been chosen, or was invalid
 
             System.Random random = new System.Random(__instance.randomMapSeed + 2017);
-            MoldSpreadManager moldSpreadManager = Object.FindAnyObjectByType<MoldSpreadManager>();
             int temp = __instance.currentLevel.moldSpreadIterations; // preserve
             for (int i = 0; i < outsideAINodes.Length; i++)
             {
@@ -213,9 +233,9 @@ namespace YesFox
                         // final test... can the fox spawn here?
 
                         // must simulate weed growth, there aren't any shortcuts for this
-                        moldSpreadManager.GenerateMold(outsideAINodes[i].transform.position, Plugin.Shroud_MaximumIterations.Value);
-                        int amt = moldSpreadManager.generatedMold.Count;
-                        moldSpreadManager.RemoveAllMold();
+                        MoldSpreadManager.GenerateMold(outsideAINodes[i].transform.position, Plugin.Shroud_MaximumIterations.Value);
+                        int amt = MoldSpreadManager.generatedMold.Count;
+                        MoldSpreadManager.RemoveAllMold();
 
                         if (amt >= Plugin.Fox_MinimumWeeds.Value)
                         {
@@ -255,7 +275,7 @@ namespace YesFox
 
             try
             {
-                EnemyType bushWolfTypeOrig = Object.FindFirstObjectByType<QuickMenuManager>()?.testAllEnemiesLevel?.OutsideEnemies.FirstOrDefault(x => x.enemyType.name == "BushWolf" && x.enemyType.enemyPrefab?.GetComponentsInChildren<SkinnedMeshRenderer>()?.Length > 0)?.enemyType;
+                EnemyType bushWolfTypeOrig = Object.FindAnyObjectByType<QuickMenuManager>()?.testAllEnemiesLevel?.OutsideEnemies.FirstOrDefault(x => x.enemyType.name == "BushWolf" && x.enemyType.enemyPrefab?.GetComponentsInChildren<SkinnedMeshRenderer>()?.Length > 0)?.enemyType;
                 EnemyType bushWolfTypeAddon = Resources.FindObjectsOfTypeAll<EnemyType>().FirstOrDefault(x => x.name == "BushWolf" && x.enemyPrefab == Plugin.BushWolfAddonPrefab);
                 if (bushWolfTypeOrig != bushWolfTypeAddon)
                 {
@@ -312,11 +332,10 @@ namespace YesFox
 
         public static void SpawnWeedEnemies(int currentHour)
         {
-            MoldSpreadManager moldSpreadManager = Object.FindFirstObjectByType<MoldSpreadManager>();
             int num = 0;
-            if (moldSpreadManager != null)
+            if (MoldSpreadManager != null)
             {
-                num = moldSpreadManager.generatedMold.Count(x => x != null && x.activeSelf);
+                num = MoldSpreadManager.generatedMold.Count(x => x != null && x.activeSelf);
             }
             if (num < Plugin.Fox_MinimumWeeds.Value)
             {
@@ -445,13 +464,24 @@ namespace YesFox
             if (___nearbyColliders != null && ___nearbyColliders.Length > 10)
                 return;
 
-            MoldSpreadManager moldSpreadManager = Object.FindFirstObjectByType<MoldSpreadManager>();
-            if (moldSpreadManager?.generatedMold == null)
+            if (MoldSpreadManager?.generatedMold == null)
                 return;
 
-            if (___nearbyColliders == null || moldSpreadManager.generatedMold.Count > ___nearbyColliders.Length)
+            if (___nearbyColliders == null || MoldSpreadManager.generatedMold.Count > ___nearbyColliders.Length)
             {
-                ___nearbyColliders = new Collider[moldSpreadManager.generatedMold.Count];
+                ___nearbyColliders = new Collider[MoldSpreadManager.generatedMold.Count];
+            }
+        }
+
+        static GameObject _moldAttractionPoint;
+        static GameObject MoldAttractionPoint
+        {
+            get
+            {
+                if (_moldAttractionPoint == null)
+                    _moldAttractionPoint = GameObject.FindGameObjectWithTag("MoldAttractionPoint");
+
+                return _moldAttractionPoint;
             }
         }
 
@@ -460,7 +490,7 @@ namespace YesFox
         [HarmonyPostfix]
         public static void Post_GetBiggestWeedPatch(BushWolfEnemy __instance, bool __result)
         {
-            if (__result && !GameObject.FindGameObjectWithTag("MoldAttractionPoint"))
+            if (__result && MoldAttractionPoint == null)
             {
                 __instance.aggressivePosition = __instance.mostHiddenPosition;
             }
@@ -483,6 +513,127 @@ namespace YesFox
                 StartOfRound.Instance.currentLevel.moldSpreadIterations = iterations;
                 StartOfRound.Instance.currentLevel.moldStartPosition = __state;
             }
+        }
+
+        // caching
+        [HarmonyPatch(typeof(MoldSpreadManager), "Start")]
+        [HarmonyPostfix]
+        static void MoldSpreadManager_Start(MoldSpreadManager __instance)
+        {
+            if (_moldSpreadManager == null)
+                _moldSpreadManager = __instance;
+        }
+
+        static VehicleController vehicleController;
+        [HarmonyPatch(typeof(VehicleController), "Awake")]
+        [HarmonyPostfix]
+        static void VehicleController_Awake(VehicleController __instance)
+        {
+            if (vehicleController == null)
+                vehicleController = __instance;
+        }
+
+        [HarmonyPatch(typeof(BushWolfEnemy), nameof(BushWolfEnemy.Update))]
+        [HarmonyTranspiler]
+        static IEnumerable<CodeInstruction> CacheVehicleController(IEnumerable<CodeInstruction> instructions)
+        {
+            List<CodeInstruction> codes = instructions.ToList();
+
+            for (int i = 0; i < codes.Count; i++)
+            {
+                if (codes[i].opcode == OpCodes.Call)
+                {
+                    string methodName = codes[i].operand.ToString();
+                    if (methodName.Contains("FindObjectOfType") && methodName.Contains("VehicleController"))
+                    {
+                        codes[i].opcode = OpCodes.Ldsfld;
+                        codes[i].operand = AccessTools.Field(typeof(HarmonyPatches), nameof(vehicleController));
+                        Plugin.logSource.LogDebug($"Use cached VehicleController in Kidnapper Fox AI");
+                        break;
+                    }
+                }
+            }
+
+            return codes;
+        }
+
+        static readonly MethodInfo MOLD_SPREAD_MANAGER_INSTANCE = AccessTools.DeclaredPropertyGetter(typeof(HarmonyPatches), nameof(MoldSpreadManager));
+        [HarmonyPatch(typeof(GameNetworkManager), nameof(GameNetworkManager.SaveGameValues))]
+        [HarmonyPatch(typeof(RoundManager), nameof(RoundManager.LoadNewLevelWait), MethodType.Enumerator)]
+        [HarmonyPatch(typeof(RoundManager), nameof(RoundManager.GenerateNewLevelClientRpc))]
+        [HarmonyPatch(typeof(RoundManager), nameof(RoundManager.SpawnRandomOutsideEnemy))]
+        [HarmonyPatch(typeof(StartOfRound), nameof(StartOfRound.EndOfGame), MethodType.Enumerator)]
+        [HarmonyPatch(typeof(StartOfRound), nameof(StartOfRound.ResetMoldStates))]
+        [HarmonyTranspiler]
+        static IEnumerable<CodeInstruction> CacheMoldSpreadManager(IEnumerable<CodeInstruction> instructions, MethodBase __originalMethod)
+        {
+            List<CodeInstruction> codes = instructions.ToList();
+
+            for (int i = 0; i < codes.Count; i++)
+            {
+                if (codes[i].opcode == OpCodes.Call)
+                {
+                    string methodName = codes[i].operand.ToString();
+                    if (methodName.Contains("FindObjectOfType") && methodName.Contains("MoldSpreadManager"))
+                    {
+                        codes[i].operand = MOLD_SPREAD_MANAGER_INSTANCE;
+                        Plugin.logSource.LogDebug($"Use cached MoldSpreadManager in {__originalMethod.DeclaringType}.{__originalMethod.Name}");
+                    }
+                }
+            }
+
+            //Plugin.Logger.LogWarning($"{__originalMethod.Name} transpiler failed");
+            return codes;
+        }
+
+        public static GameObject[] FindMoldSpores()
+        {
+            if (MoldSpreadManager?.generatedMold == null)
+                return GameObject.FindGameObjectsWithTag("MoldSpore");
+
+            return MoldSpreadManager.generatedMold.Where(x => x != null && x.activeSelf).ToArray();
+        }
+
+        static readonly MethodInfo MOLD_ATTRACTION_POINT = AccessTools.DeclaredPropertyGetter(typeof(HarmonyPatches), nameof(MoldAttractionPoint));
+        static readonly MethodInfo FIND_MOLD_SPORES = AccessTools.Method(typeof(HarmonyPatches), nameof(FindMoldSpores));
+        static readonly MethodInfo FIND_GAME_OBJECT_WITH_TAG = AccessTools.Method(typeof(GameObject), nameof(GameObject.FindGameObjectWithTag));
+        static readonly MethodInfo FIND_GAME_OBJECTS_WITH_TAG = AccessTools.Method(typeof(GameObject), nameof(GameObject.FindGameObjectsWithTag));
+        [HarmonyPatch(typeof(MoldSpreadManager), "GenerateMold")]
+        [HarmonyPatch(typeof(BushWolfEnemy), nameof(BushWolfEnemy.GetBiggestWeedPatch))]
+        [HarmonyTranspiler]
+        static IEnumerable<CodeInstruction> CacheMoldGameObjects(IEnumerable<CodeInstruction> instructions, MethodBase __originalMethod)
+        {
+            List<CodeInstruction> codes = instructions.ToList();
+
+            for (int i = 1; i < codes.Count; i++)
+            {
+                if (codes[i].opcode == OpCodes.Call)
+                {
+                    MethodInfo methodInfo = codes[i].operand as MethodInfo; // constructors apparently cause problems if you just cast with (MethodInfo)
+                    if (methodInfo == FIND_GAME_OBJECT_WITH_TAG && codes[i - 1].opcode == OpCodes.Ldstr && (string)codes[i - 1].operand == "MoldAttractionPoint")
+                    {
+                        codes[i].operand = MOLD_ATTRACTION_POINT;
+
+                        // would remove instead, but that breaks labels in GetBiggestWeedPatch, and probably isn't worth fixing
+                        codes[i - 1].opcode = OpCodes.Nop;
+                        //codes[i - 1].operand = null;
+
+                        Plugin.logSource.LogDebug($"Use cached MoldAttractionPoint in {__originalMethod.DeclaringType}.{__originalMethod.Name}");
+                    }
+                    else if (methodInfo == FIND_GAME_OBJECTS_WITH_TAG && codes[i - 1].opcode == OpCodes.Ldstr && (string)codes[i - 1].operand == "MoldSpore")
+                    {
+                        codes[i].operand = FIND_MOLD_SPORES;
+
+                        codes[i - 1].opcode = OpCodes.Nop;
+                        //codes[i - 1].operand = null;
+
+                        Plugin.logSource.LogDebug($"Use cached MoldSpore game objects in {__originalMethod.DeclaringType}.{__originalMethod.Name}");
+                    }
+                }
+            }
+
+            //Plugin.Logger.LogWarning($"{__originalMethod.Name} transpiler failed");
+            return codes;
         }
     }
 }
