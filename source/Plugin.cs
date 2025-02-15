@@ -292,7 +292,7 @@ namespace YesFox
                         {
                             foreach (SkinnedMeshRenderer renderer in renderersNew)
                             {
-                                Material[] mats = new Material[renderer.sharedMaterials.Length];
+                                Material[] mats = new Material[renderer.name == "BodyLOD2" ? 1 : 2];
                                 for (int i = 0; i < mats.Length; i++)
                                 {
                                     mats[i] = rendererOrig.materials[i];
