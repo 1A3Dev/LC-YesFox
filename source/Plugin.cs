@@ -276,52 +276,40 @@ namespace YesFox
             try
             {
                 EnemyType bushWolfTypeOrig = Object.FindAnyObjectByType<QuickMenuManager>()?.testAllEnemiesLevel?.OutsideEnemies.FirstOrDefault(x => x.enemyType.name == "BushWolf" && x.enemyType.enemyPrefab?.GetComponentsInChildren<SkinnedMeshRenderer>()?.Length > 0)?.enemyType;
-                EnemyType bushWolfTypeAddon = Resources.FindObjectsOfTypeAll<EnemyType>().FirstOrDefault(x => x.name == "BushWolf" && x.enemyPrefab == Plugin.BushWolfAddonPrefab);
-                if (bushWolfTypeOrig != bushWolfTypeAddon)
+                if (bushWolfTypeOrig != null)
                 {
-                    if (bushWolfTypeOrig == null && bushWolfTypeAddon != null)
+                    if (GameNetworkManager.Instance.gameVersionNum >= 64 && bushWolfTypeOrig.enemyPrefab != Plugin.BushWolfAddonPrefab && Plugin.BushWolfAddonPrefab != null)
                     {
-                        bushWolfTypeOrig = bushWolfTypeAddon;
-                        bushWolfTypeAddon = null;
-                    }
-
-                    if (bushWolfTypeOrig != null)
-                    {
-                        if (bushWolfTypeAddon != null)
+                        if (Plugin.BushWolfAddonPrefab.GetComponent<EnemyAI>() != null)
                         {
-                            if (bushWolfTypeAddon.enemyPrefab == Plugin.BushWolfAddonPrefab)
-                            {
-                                Plugin.logSource.LogInfo($"[GenerateWeedEnemiesList] BushWolf: Renamed addon EnemyType name");
-                                bushWolfTypeAddon.name = "BushWolfAddon";
-                            }
+                            Plugin.BushWolfAddonPrefab.GetComponent<EnemyAI>().enemyType = bushWolfTypeOrig;
+                            Plugin.logSource.LogInfo("[GenerateWeedEnemiesList] BushWolf: Replaced addon EnemyAI enemyType");
+                        }
 
-                            if (bushWolfTypeAddon.enemyPrefab?.gameObject?.GetComponent<EnemyAI>())
+                        SkinnedMeshRenderer rendererOrig = bushWolfTypeOrig.enemyPrefab?.GetComponentsInChildren<SkinnedMeshRenderer>().FirstOrDefault(rend => rend.sharedMaterials.Length > 1);
+                        SkinnedMeshRenderer[] renderersNew = Plugin.BushWolfAddonPrefab.GetComponentsInChildren<SkinnedMeshRenderer>();
+                        if (rendererOrig != null)
+                        {
+                            foreach (SkinnedMeshRenderer renderer in renderersNew)
                             {
-                                bushWolfTypeAddon.enemyPrefab.gameObject.GetComponent<EnemyAI>().enemyType = bushWolfTypeOrig;
-                                Plugin.logSource.LogInfo("[GenerateWeedEnemiesList] BushWolf: Replaced addon EnemyAI enemyType");
-                            }
-
-                            if (GameNetworkManager.Instance.gameVersionNum >= 64)
-                            {
-                                SkinnedMeshRenderer[] renderersOrig = bushWolfTypeOrig.enemyPrefab?.GetComponentsInChildren<SkinnedMeshRenderer>();
-                                SkinnedMeshRenderer[] renderersNew = bushWolfTypeAddon.enemyPrefab?.GetComponentsInChildren<SkinnedMeshRenderer>();
-                                foreach (SkinnedMeshRenderer renderer in renderersNew)
+                                Material[] mats = new Material[renderer.sharedMaterials.Length];
+                                for (int i = 0; i < mats.Length; i++)
                                 {
-                                    renderer.material = renderersOrig[0].material;
-                                    renderer.materials = renderersOrig[0].materials;
+                                    mats[i] = rendererOrig.materials[i];
                                 }
-
-                                bushWolfTypeOrig.enemyPrefab = bushWolfTypeAddon.enemyPrefab;
-                                Plugin.logSource.LogInfo("[GenerateWeedEnemiesList] BushWolf: Replaced original EnemyType prefab");
+                                renderer.materials = mats;
                             }
                         }
 
-                        WeedEnemies.Add(new SpawnableEnemyWithRarity()
-                        {
-                            enemyType = bushWolfTypeOrig,
-                            rarity = 100,
-                        });
+                        bushWolfTypeOrig.enemyPrefab = Plugin.BushWolfAddonPrefab;
+                        Plugin.logSource.LogInfo("[GenerateWeedEnemiesList] BushWolf: Replaced original EnemyType prefab");
                     }
+
+                    WeedEnemies.Add(new SpawnableEnemyWithRarity()
+                    {
+                        enemyType = bushWolfTypeOrig,
+                        rarity = 100,
+                    });
                 }
             }
             catch (Exception e)
