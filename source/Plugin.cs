@@ -118,61 +118,59 @@ namespace YesFox
             }
         }
 
-        [HarmonyPatch(typeof(StartOfRound), "SetPlanetsMold")]
-        [HarmonyPrefix]
-        public static bool SetPlanetsMold(StartOfRound __instance)
+        [HarmonyPatch(typeof(TimeOfDay), "OnDayChanged")]
+        [HarmonyPostfix]
+        public static void OnDayChanged(TimeOfDay __instance)
         {
-            if (!__instance.IsOwner) return false;
-
-            System.Random random = new System.Random(__instance.randomMapSeed + 32);
+            if (!__instance.IsOwner || StartOfRound.Instance.isChallengeFile) return;
+            
+            System.Random random = new System.Random(StartOfRound.Instance.randomMapSeed + 32);
             Terminal terminal = Object.FindAnyObjectByType<Terminal>();
-            for (int i = 0; i < __instance.levels.Length; i++)
+            for (int i = 0; i < StartOfRound.Instance.levels.Length; i++)
             {
-                if (i == 3 || (!__instance.levels[i].canSpawnMold && !Plugin.Shroud_AllMoons.Value))
+                if (i == 3 || (!StartOfRound.Instance.levels[i].canSpawnMold && !Plugin.Shroud_AllMoons.Value))
                 {
-                    Plugin.logSource.LogInfo($"Skipping level #{i} {__instance.levels[i].PlanetName} mold iterations");
+                    Plugin.logSource.LogInfo($"Skipping level #{i} {StartOfRound.Instance.levels[i].PlanetName} mold iterations");
                     continue;
                 }
 
-                if (__instance.levels[i].moldSpreadIterations > 0)
+                if (StartOfRound.Instance.levels[i].moldSpreadIterations > 0)
                 {
-                    if (__instance.levels[i].moldSpreadIterations < Plugin.Shroud_MaximumIterations.Value)
+                    if (StartOfRound.Instance.levels[i].moldSpreadIterations < Plugin.Shroud_MaximumIterations.Value)
                     {
-                        float chance = (__instance.levels[i] == __instance.currentLevel ? Plugin.Shroud_GrowChance_SameMoon.Value : Plugin.Shroud_GrowChance_OtherMoons.Value) / 100f;
+                        float chance = (StartOfRound.Instance.levels[i] == StartOfRound.Instance.currentLevel ? Plugin.Shroud_GrowChance_SameMoon.Value : Plugin.Shroud_GrowChance_OtherMoons.Value) / 100f;
                         if (random.NextDouble() <= chance)
                         {
-                            __instance.levels[i].moldSpreadIterations++;
-                            Plugin.logSource.LogInfo($"Increasing level #{i} {__instance.levels[i].PlanetName} mold iterations by 1; risen to {__instance.levels[i].moldSpreadIterations}");
+                            StartOfRound.Instance.levels[i].moldSpreadIterations++;
+                            Plugin.logSource.LogInfo($"Increasing level #{i} {StartOfRound.Instance.levels[i].PlanetName} mold iterations by 1; risen to {StartOfRound.Instance.levels[i].moldSpreadIterations}");
                         }
                     }
                     continue;
                 }
 
                 float num;
-                if (__instance.levels[i] == __instance.currentLevel)
+                if (StartOfRound.Instance.levels[i] == StartOfRound.Instance.currentLevel)
                 {
                     num = Plugin.Shroud_SpawnChance_SameMoon.Value / 100f;
                 }
                 else
                 {
                     num = Plugin.Shroud_SpawnChance_OtherMoons.Value / 100f;
-                    if (terminal.groupCredits < 200 && __instance.levels[i].levelID == 12)
+                    if (terminal.groupCredits < 200 && StartOfRound.Instance.levels[i].levelID == 12)
                     {
                         num *= 1.25f; // 0.04 -> 0.05 (vanilla)
                     }
-                    else if (terminal.groupCredits < 500 && (__instance.levels[i].levelID == 7 || __instance.levels[i].levelID == 6 || __instance.levels[i].levelID >= 10) && (__instance.currentLevel.levelID == 5 || __instance.currentLevel.levelID == 8 || __instance.currentLevel.levelID == 4 || __instance.currentLevel.levelID <= 2))
+                    else if (terminal.groupCredits < 500 && (StartOfRound.Instance.levels[i].levelID == 7 || StartOfRound.Instance.levels[i].levelID == 6 || StartOfRound.Instance.levels[i].levelID >= 10) && (StartOfRound.Instance.currentLevel.levelID == 5 || StartOfRound.Instance.currentLevel.levelID == 8 || StartOfRound.Instance.currentLevel.levelID == 4 || StartOfRound.Instance.currentLevel.levelID <= 2))
                     {
                         num *= 0.5f; // 0.04 -> 0.02 (vanilla)
                     }
                 }
                 if (random.NextDouble() <= num)
                 {
-                    __instance.levels[i].moldSpreadIterations += random.Next(1, 3);
-                    Plugin.logSource.LogInfo($"Increasing level #{i} {__instance.levels[i].PlanetName} mold iterations for the first time; risen to {__instance.levels[i].moldSpreadIterations}");
+                    StartOfRound.Instance.levels[i].moldSpreadIterations += random.Next(1, 3);
+                    Plugin.logSource.LogInfo($"Increasing level #{i} {StartOfRound.Instance.levels[i].PlanetName} mold iterations for the first time; risen to {StartOfRound.Instance.levels[i].moldSpreadIterations}");
                 }
             }
-
-            return false;
         }
 
         // called after the scene (and AI nodes) load, but before LoadNewLevelWait selects a start position
