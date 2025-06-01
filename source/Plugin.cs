@@ -198,7 +198,7 @@ namespace YesFox
             if (outsideAINodes == null || outsideAINodes.Length < 1)
                 return;
 
-            Vector3 shipPos = new(1.27146339f, 0.278438568f, -7.5f); // StartOfRound.elevatorTransform position, when fully landed
+            Vector3 shipPos = StartOfRound.Instance.shipLandingPosition.position; // StartOfRound.elevatorTransform position, when fully landed
 
             outsideAINodes = [.. outsideAINodes.OrderBy(x => Vector3.Distance(x.transform.position, shipPos))];
 

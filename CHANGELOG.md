@@ -1,3 +1,7 @@
+### 1.1.4
+
+- Fixed an exception on v70+
+
 ### 1.1.3
 
 - Fixed the fox not being able to spawn after re-hosting the lobby by @ButteryStancakes in https://github.com/1A3Dev/LC-YesFox/pull/10
