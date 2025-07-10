@@ -1,3 +1,7 @@
+### 1.1.5
+
+- Added per-moon configs for weed & fox spawning overrides by @emuyia in https://github.com/1A3Dev/LC-YesFox/pull/11
+
 ### 1.1.4
 
 - Fixed an exception on v70+
