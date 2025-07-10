@@ -8,7 +8,7 @@ namespace YesFox.Compatibility
     {
         public static void Init(int versionNum)
         {
-            Plugin.logSource.LogWarning("LobbyCompatibility detected, registering plugin with LobbyCompatibility.");
+            Plugin.StaticLogger.LogWarning("LobbyCompatibility detected, registering plugin with LobbyCompatibility.");
 
             Version pluginVersion = Version.Parse(MyPluginInfo.PLUGIN_VERSION);
 

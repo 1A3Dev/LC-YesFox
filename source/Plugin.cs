@@ -21,7 +21,8 @@ namespace YesFox
     {
         private readonly Harmony harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);
 
-        internal static ManualLogSource logSource;
+        internal static ManualLogSource StaticLogger { get; private set; }
+        internal static ConfigFile StaticConfig { get; private set; }
 
         internal static List<GameObject> _networkPrefabs = new List<GameObject>();
         public static GameObject BushWolfAddonPrefab { get; internal set; }
@@ -49,18 +50,17 @@ namespace YesFox
 
         private void Awake()
         {
-            logSource = Logger;
-
-            HarmonyPatches.Initialize(Config);
+            StaticLogger = Logger;
+            StaticConfig = Config;
 
             Assembly patches = Assembly.GetExecutingAssembly();
             harmony.PatchAll(patches);
-            logSource.LogInfo("Patches Loaded");
+            StaticLogger.LogInfo("Patches Loaded");
 
             AssetBundle BushWolfBundle = AssetBundle.LoadFromFile(Path.Combine(Path.GetDirectoryName(Info.Location), "bush_wolf"));
             if (BushWolfBundle == null)
             {
-                logSource.LogError("[AssetBundle] Failed to load asset bundle: bush_wolf");
+                StaticLogger.LogError("[AssetBundle] Failed to load asset bundle: bush_wolf");
                 return;
             }
             BushWolfAddonPrefab = BushWolfBundle.LoadAsset<GameObject>("Assets/LethalCompany/Game/Prefabs/EnemyAI/BushWolfEnemy.prefab");
@@ -68,11 +68,11 @@ namespace YesFox
             {
                 if (!_networkPrefabs.Contains(BushWolfAddonPrefab))
                     _networkPrefabs.Add(BushWolfAddonPrefab);
-                logSource.LogInfo("[AssetBundle] Successfully loaded prefab: BushWolfEnemy");
+                StaticLogger.LogInfo("[AssetBundle] Successfully loaded prefab: BushWolfEnemy");
             }
             else
             {
-                logSource.LogError("[AssetBundle] Failed to load prefab: BushWolfEnemy");
+                StaticLogger.LogError("[AssetBundle] Failed to load prefab: BushWolfEnemy");
             }
 
             Shroud_AllMoons = Config.Bind("Weed Spawning", "All Moons", false, "Should weeds be able to spawn on all moons excluding gordion?");
@@ -92,13 +92,7 @@ namespace YesFox
     [HarmonyPatch]
     internal static class HarmonyPatches
     {
-        private static ConfigFile Config;
         private static bool perMoonConfigsGenerated = false;
-
-        internal static void Initialize(ConfigFile config)
-        {
-            Config = config;
-        }
 
         [HarmonyPatch(typeof(GameNetworkManager), "Start")]
         [HarmonyPostfix]
@@ -166,7 +160,7 @@ namespace YesFox
 
                 if (i == 3 || (!canSpawnOnMoon && !Plugin.Shroud_AllMoons.Value))
                 {
-                    Plugin.logSource.LogInfo($"Skipping level #{i} {level.PlanetName} mold iterations");
+                    Plugin.StaticLogger.LogInfo($"Skipping level #{i} {level.PlanetName} mold iterations");
                     continue;
                 }
 
@@ -184,7 +178,7 @@ namespace YesFox
                         if (random.NextDouble() <= chance / 100f)
                         {
                             level.moldSpreadIterations++;
-                            Plugin.logSource.LogInfo($"Increasing level #{i} {level.PlanetName} mold iterations by 1; risen to {level.moldSpreadIterations}");
+                            Plugin.StaticLogger.LogInfo($"Increasing level #{i} {level.PlanetName} mold iterations by 1; risen to {level.moldSpreadIterations}");
                         }
                     }
                     continue;
@@ -217,7 +211,7 @@ namespace YesFox
                 if (random.NextDouble() <= num)
                 {
                     level.moldSpreadIterations += random.Next(1, 3);
-                    Plugin.logSource.LogInfo($"Increasing level #{i} {level.PlanetName} mold iterations for the first time; risen to {level.moldSpreadIterations}");
+                    Plugin.StaticLogger.LogInfo($"Increasing level #{i} {level.PlanetName} mold iterations for the first time; risen to {level.moldSpreadIterations}");
                 }
             }
         }
@@ -265,7 +259,7 @@ namespace YesFox
                 if (shipDist >= 30f)
                     return;
 
-                Plugin.logSource.LogInfo($"Mold growth is starting from node #{__instance.currentLevel.moldStartPosition} which is too close to the ship ({shipDist} < 30)");
+                Plugin.StaticLogger.LogInfo($"Mold growth is starting from node #{__instance.currentLevel.moldStartPosition} which is too close to the ship ({shipDist} < 30)");
             }
 
             // starting point has not been chosen, or was invalid
@@ -281,7 +275,7 @@ namespace YesFox
                 // greater than 40 units and selected randomly
                 if (shipDist >= minDistance && (random.Next(100) < 13 || outsideAINodes.Length - i < 20))
                 {
-                    Plugin.logSource.LogDebug($"Mold growth: outsideAINodes[{i}] is candidate (ship dist: {shipDist} > {minDistance})");
+                    Plugin.StaticLogger.LogDebug($"Mold growth: outsideAINodes[{i}] is candidate (ship dist: {shipDist} > {minDistance})");
                     // furthest distance in vanilla is on Artifice (7.88802)
                     if (Physics.Raycast(outsideAINodes[i].transform.position, Vector3.down, out RaycastHit hit, 8f, StartOfRound.Instance.collidersAndRoomMaskAndDefault, QueryTriggerInteraction.Ignore))
                     {
@@ -296,20 +290,20 @@ namespace YesFox
                         {
                             __instance.currentLevel.moldStartPosition = i;
                             __instance.currentLevel.moldSpreadIterations = temp;
-                            Plugin.logSource.LogInfo($"Mold growth: Selected outsideAINodes[{i}]: coords {outsideAINodes[i].transform.position}, dist {shipDist}");
+                            Plugin.StaticLogger.LogInfo($"Mold growth: Selected outsideAINodes[{i}]: coords {outsideAINodes[i].transform.position}, dist {shipDist}");
                             return;
                         }
                         else
-                            Plugin.logSource.LogDebug($"Mold growth: outsideAINodes[{i}] rejected (max weeds: {amt} < {minWeeds})");
+                            Plugin.StaticLogger.LogDebug($"Mold growth: outsideAINodes[{i}] rejected (max weeds: {amt} < {minWeeds})");
                     }
                     else
-                        Plugin.logSource.LogDebug($"Mold growth: outsideAINodes[{i}] rejected (no ground)");
+                        Plugin.StaticLogger.LogDebug($"Mold growth: outsideAINodes[{i}] rejected (no ground)");
                 }
             }
 
             __instance.currentLevel.moldSpreadIterations = 0;
             __instance.currentLevel.moldStartPosition = -1;
-            Plugin.logSource.LogInfo($"Level \"{__instance.currentLevel.PlanetName}\" has no valid AI nodes");
+            Plugin.StaticLogger.LogInfo($"Level \"{__instance.currentLevel.PlanetName}\" has no valid AI nodes");
         }
 
         // v64
@@ -327,60 +321,60 @@ namespace YesFox
 
         private static void GeneratePerMoonConfigsIfNeeded(StartOfRound startOfRoundInstance)
         {
-            if (!perMoonConfigsGenerated && Config != null)
+            if (!perMoonConfigsGenerated && Plugin.StaticConfig != null)
             {
-                Plugin.logSource.LogInfo("Generating per-moon fox & weed configs...");
+                Plugin.StaticLogger.LogInfo("Generating per-moon fox & weed configs...");
                 foreach (SelectableLevel level in startOfRoundInstance.levels)
                 {
-                    if (level.levelID == 3) continue;
+                    if (!level.spawnEnemiesAndScrap) continue;
 
                     string planetName = level.PlanetName;
                     string sanitizedName = new string(planetName.Where(c => char.IsLetterOrDigit(c) || char.IsWhiteSpace(c)).ToArray()).Trim();
                     string overrideSection = $"Moon Overrides.{sanitizedName}";
 
-                    Plugin.Shroud_MoonToggles.TryAdd(planetName, Config.Bind(
+                    Plugin.Shroud_MoonToggles.TryAdd(planetName, Plugin.StaticConfig.Bind(
                         overrideSection, "Enable Weed Spawning", level.canSpawnMold,
                         $"Controls whether weeds can spawn on {planetName} at all. This is the master switch for this moon."
                     ));
 
-                    Plugin.WeedOverridesEnabled.TryAdd(planetName, Config.Bind(
+                    Plugin.WeedOverridesEnabled.TryAdd(planetName, Plugin.StaticConfig.Bind(
                         overrideSection, "Enable Weed Overrides", false,
                         $"Enable per-moon overrides for weed settings (spawn/growth chance, etc). If this is false, the global settings will be used."
                     ));
 
-                    Plugin.Shroud_MoonSpawnChanceSameMoonOverrides.TryAdd(planetName, Config.Bind(
+                    Plugin.Shroud_MoonSpawnChanceSameMoonOverrides.TryAdd(planetName, Plugin.StaticConfig.Bind(
                         overrideSection, "Spawn Chance (While Routed)", Plugin.Shroud_SpawnChance_SameMoon.Value,
                         new ConfigDescription($"Override the weed spawn chance for {planetName} when you are currently routed to it.", new AcceptableValueRange<float>(0f, 100f))
                     ));
-                    Plugin.Shroud_MoonSpawnChanceOtherMoonsOverrides.TryAdd(planetName, Config.Bind(
+                    Plugin.Shroud_MoonSpawnChanceOtherMoonsOverrides.TryAdd(planetName, Plugin.StaticConfig.Bind(
                         overrideSection, "Spawn Chance (While Not Routed)", Plugin.Shroud_SpawnChance_OtherMoons.Value,
                         new ConfigDescription($"Override the weed spawn chance for {planetName} when you are routed to another moon.", new AcceptableValueRange<float>(0f, 100f))
                     ));
-                    Plugin.Shroud_MoonGrowChanceSameMoonOverrides.TryAdd(planetName, Config.Bind(
+                    Plugin.Shroud_MoonGrowChanceSameMoonOverrides.TryAdd(planetName, Plugin.StaticConfig.Bind(
                         overrideSection, "Growth Chance (While Routed)", Plugin.Shroud_GrowChance_SameMoon.Value,
                         new ConfigDescription($"Override the weed growth chance for {planetName} when you are currently routed to it.", new AcceptableValueRange<float>(0f, 100f))
                     ));
-                    Plugin.Shroud_MoonGrowChanceOtherMoonsOverrides.TryAdd(planetName, Config.Bind(
+                    Plugin.Shroud_MoonGrowChanceOtherMoonsOverrides.TryAdd(planetName, Plugin.StaticConfig.Bind(
                         overrideSection, "Growth Chance (While Not Routed)", Plugin.Shroud_GrowChance_OtherMoons.Value,
                         new ConfigDescription($"Override the weed growth chance for {planetName} when you are routed to another moon.", new AcceptableValueRange<float>(0f, 100f))
                     ));
-                    Plugin.Shroud_MoonMaxIterationOverrides.TryAdd(planetName, Config.Bind(
+                    Plugin.Shroud_MoonMaxIterationOverrides.TryAdd(planetName, Plugin.StaticConfig.Bind(
                         overrideSection, "Maximum Iterations", Plugin.Shroud_MaximumIterations.Value,
                         new ConfigDescription($"Override the global maximum weed iterations for {planetName}.", new AcceptableValueRange<int>(1, 20))
                     ));
-                    Plugin.Shroud_MoonMinDistanceOverrides.TryAdd(planetName, Config.Bind(
+                    Plugin.Shroud_MoonMinDistanceOverrides.TryAdd(planetName, Plugin.StaticConfig.Bind(
                         overrideSection, "Minimum Distance", Plugin.Shroud_MinimumDistance.Value,
                         new ConfigDescription($"Override the global minimum distance for weed growth on {planetName}.", new AcceptableValueRange<float>(30f, 70f))
                     ));
-                    Plugin.FoxOverridesEnabled.TryAdd(planetName, Config.Bind(
+                    Plugin.FoxOverridesEnabled.TryAdd(planetName, Plugin.StaticConfig.Bind(
                         overrideSection, "Enable Fox Overrides", false,
                         $"Enable per-moon overrides for fox settings (minimum weeds, spawn chance). If this is false, the global settings will be used."
                     ));
-                    Plugin.Fox_MinimumWeedsOverrides.TryAdd(planetName, Config.Bind(
+                    Plugin.Fox_MinimumWeedsOverrides.TryAdd(planetName, Plugin.StaticConfig.Bind(
                         overrideSection, "Fox Minimum Weeds", Plugin.Fox_MinimumWeeds.Value,
                         new ConfigDescription($"Override the minimum weeds required for a fox to spawn on {planetName}.")
                     ));
-                    Plugin.Fox_SpawnChanceOverrides.TryAdd(planetName, Config.Bind(
+                    Plugin.Fox_SpawnChanceOverrides.TryAdd(planetName, Plugin.StaticConfig.Bind(
                         overrideSection, "Fox Spawn Chance", Plugin.Fox_SpawnChance.Value,
                         new ConfigDescription($"Override the spawn chance for a fox on {planetName}. Set to -1 to use the vanilla spawn logic.", new AcceptableValueRange<int>(-1, 100))
                     ));
@@ -403,7 +397,7 @@ namespace YesFox
                         if (Plugin.BushWolfAddonPrefab.GetComponent<EnemyAI>() != null)
                         {
                             Plugin.BushWolfAddonPrefab.GetComponent<EnemyAI>().enemyType = bushWolfTypeOrig;
-                            Plugin.logSource.LogInfo("[GenerateWeedEnemiesList] BushWolf: Replaced addon EnemyAI enemyType");
+                            Plugin.StaticLogger.LogInfo("[GenerateWeedEnemiesList] BushWolf: Replaced addon EnemyAI enemyType");
                         }
 
                         SkinnedMeshRenderer rendererOrig = bushWolfTypeOrig.enemyPrefab?.GetComponentsInChildren<SkinnedMeshRenderer>().FirstOrDefault(rend => rend.sharedMaterials.Length > 1);
@@ -422,7 +416,7 @@ namespace YesFox
                         }
 
                         bushWolfTypeOrig.enemyPrefab = Plugin.BushWolfAddonPrefab;
-                        Plugin.logSource.LogInfo("[GenerateWeedEnemiesList] BushWolf: Replaced original EnemyType prefab");
+                        Plugin.StaticLogger.LogInfo("[GenerateWeedEnemiesList] BushWolf: Replaced original EnemyType prefab");
                     }
 
                     WeedEnemies.Add(new SpawnableEnemyWithRarity()
@@ -434,7 +428,7 @@ namespace YesFox
             }
             catch (Exception e)
             {
-                Plugin.logSource.LogError(e);
+                Plugin.StaticLogger.LogError(e);
             }
         }
 
@@ -451,7 +445,7 @@ namespace YesFox
 
             if (num < minWeeds)
             {
-                Plugin.logSource.LogDebug($"Weed enemies attempted to spawn but were denied. Reason: WeedCount | Amount: {num}");
+                Plugin.StaticLogger.LogDebug($"Weed enemies attempted to spawn but were denied. Reason: WeedCount | Amount: {num}");
                 return;
             }
 
@@ -462,7 +456,7 @@ namespace YesFox
                 int spawnChance = WeedEnemySpawnRandom.Next(1, 100);
                 if (spawnChance > foxSpawnChance)
                 {
-                    Plugin.logSource.LogDebug($"Weed enemies attempted to spawn but were denied. Reason: SpawnChance | Amount: {spawnChance}");
+                    Plugin.StaticLogger.LogDebug($"Weed enemies attempted to spawn but were denied. Reason: SpawnChance | Amount: {spawnChance}");
                     return;
                 }
             }
@@ -471,7 +465,7 @@ namespace YesFox
                 int spawnChance = WeedEnemySpawnRandom.Next(0, 80);
                 if (spawnChance > num)
                 {
-                    Plugin.logSource.LogDebug($"Weed enemies attempted to spawn but were denied. Reason: SpawnChance | Amount: {spawnChance}");
+                    Plugin.StaticLogger.LogDebug($"Weed enemies attempted to spawn but were denied. Reason: SpawnChance | Amount: {spawnChance}");
                     return;
                 }
             }
@@ -484,7 +478,7 @@ namespace YesFox
                 GenerateWeedEnemiesList();
                 if (WeedEnemies.Count == 0)
                 {
-                    Plugin.logSource.LogError($"Weed enemies attempted to spawn but were denied. Reason: ListEmpty");
+                    Plugin.StaticLogger.LogError($"Weed enemies attempted to spawn but were denied. Reason: ListEmpty");
                     return;
                 }
             }
@@ -512,7 +506,7 @@ namespace YesFox
                 if (enemyType.PowerLevel > RoundManager.Instance.currentMaxOutsidePower - RoundManager.Instance.currentOutsideEnemyPower || enemyType.numberSpawned >= enemyType.MaxCount || enemyType.spawningDisabled)
                 {
                     RoundManager.Instance.SpawnProbabilities.Add(0);
-                    Plugin.logSource.LogDebug($"A weed enemy attempted to spawn but was denied. Reason: Probability | Amount: 0");
+                    Plugin.StaticLogger.LogDebug($"A weed enemy attempted to spawn but was denied. Reason: Probability | Amount: 0");
                     continue;
                 }
                 int num2 = ((RoundManager.Instance.increasedOutsideEnemySpawnRateIndex == i) ? 100 : ((!enemyType.useNumberSpawnedFalloff) ? ((int)((float)WeedEnemies[i].rarity * enemyType.probabilityCurve.Evaluate(timeUpToCurrentHour / RoundManager.Instance.timeScript.totalTime))) : ((int)((float)WeedEnemies[i].rarity * (enemyType.probabilityCurve.Evaluate(timeUpToCurrentHour / RoundManager.Instance.timeScript.totalTime) * enemyType.numberSpawnedFalloff.Evaluate((float)enemyType.numberSpawned / 10f))))));
@@ -526,7 +520,7 @@ namespace YesFox
             RoundManager.Instance.firstTimeSpawningWeedEnemies = false;
             if (num <= 0)
             {
-                Plugin.logSource.LogDebug($"A weed enemy attempted to spawn but was denied. Reason: SpawnRate | Amount: {num}");
+                Plugin.StaticLogger.LogDebug($"A weed enemy attempted to spawn but was denied. Reason: SpawnRate | Amount: {num}");
                 return false;
             }
             bool result = false;
@@ -538,7 +532,7 @@ namespace YesFox
                 float currentOutsideEnemyPower = RoundManager.Instance.currentMaxOutsidePower - RoundManager.Instance.currentOutsideEnemyPower;
                 if (enemyType2.PowerLevel > currentOutsideEnemyPower)
                 {
-                    Plugin.logSource.LogDebug($"A weed enemy attempted to spawn but was denied. Reason: PowerLevel | Amount: {currentOutsideEnemyPower}");
+                    Plugin.StaticLogger.LogDebug($"A weed enemy attempted to spawn but was denied. Reason: PowerLevel | Amount: {currentOutsideEnemyPower}");
                     break;
                 }
                 RoundManager.Instance.currentOutsideEnemyPower += enemyType2.PowerLevel;
@@ -551,7 +545,7 @@ namespace YesFox
                 gameObject.GetComponent<EnemyAI>().enemyType.numberSpawned++;
                 result = true;
             }
-            Plugin.logSource.LogDebug($"{enemyType2.enemyName} attempted to spawn and was allowed");
+            Plugin.StaticLogger.LogDebug($"{enemyType2.enemyName} attempted to spawn and was allowed");
             return result;
         }
 
@@ -624,7 +618,7 @@ namespace YesFox
         {
             if (__instance.iterationsThisDay < 1 && iterations > 0)
             {
-                Plugin.logSource.LogInfo($"Mold growth on \"{StartOfRound.Instance.currentLevel.PlanetName}\" erroneously reset from {iterations} iterations");
+                Plugin.StaticLogger.LogInfo($"Mold growth on \"{StartOfRound.Instance.currentLevel.PlanetName}\" erroneously reset from {iterations} iterations");
                 StartOfRound.Instance.currentLevel.moldSpreadIterations = iterations;
                 StartOfRound.Instance.currentLevel.moldStartPosition = __state;
             }
@@ -663,7 +657,7 @@ namespace YesFox
                     {
                         codes[i].opcode = OpCodes.Ldsfld;
                         codes[i].operand = AccessTools.Field(typeof(HarmonyPatches), nameof(vehicleController));
-                        Plugin.logSource.LogDebug($"Use cached VehicleController in Kidnapper Fox AI");
+                        Plugin.StaticLogger.LogDebug($"Use cached VehicleController in Kidnapper Fox AI");
                         break;
                     }
                 }
@@ -692,7 +686,7 @@ namespace YesFox
                     if (methodName.Contains("FindObjectOfType") && methodName.Contains("MoldSpreadManager"))
                     {
                         codes[i].operand = MOLD_SPREAD_MANAGER_INSTANCE;
-                        Plugin.logSource.LogDebug($"Use cached MoldSpreadManager in {__originalMethod.DeclaringType}.{__originalMethod.Name}");
+                        Plugin.StaticLogger.LogDebug($"Use cached MoldSpreadManager in {__originalMethod.DeclaringType}.{__originalMethod.Name}");
                     }
                 }
             }
@@ -733,7 +727,7 @@ namespace YesFox
                         codes[i - 1].opcode = OpCodes.Nop;
                         //codes[i - 1].operand = null;
 
-                        Plugin.logSource.LogDebug($"Use cached MoldAttractionPoint in {__originalMethod.DeclaringType}.{__originalMethod.Name}");
+                        Plugin.StaticLogger.LogDebug($"Use cached MoldAttractionPoint in {__originalMethod.DeclaringType}.{__originalMethod.Name}");
                     }
                     else if (methodInfo == FIND_GAME_OBJECTS_WITH_TAG && codes[i - 1].opcode == OpCodes.Ldstr && (string)codes[i - 1].operand == "MoldSpore")
                     {
@@ -742,7 +736,7 @@ namespace YesFox
                         codes[i - 1].opcode = OpCodes.Nop;
                         //codes[i - 1].operand = null;
 
-                        Plugin.logSource.LogDebug($"Use cached MoldSpore game objects in {__originalMethod.DeclaringType}.{__originalMethod.Name}");
+                        Plugin.StaticLogger.LogDebug($"Use cached MoldSpore game objects in {__originalMethod.DeclaringType}.{__originalMethod.Name}");
                     }
                 }
             }
