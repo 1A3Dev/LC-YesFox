@@ -29,4 +29,5 @@ You can get support in any the following places:
 
 - [1A3](https://github.com/1A3Dev) - _Mod Creator_
 - [ButteryStancakes](https://github.com/ButteryStancakes) - _Contributor_
+- [emuyia](https://github.com/emuyia) - _Contributor_
 - [Nikki](https://thunderstore.io/c/lethal-company/p/Nikki/) - _Icon Creator_
