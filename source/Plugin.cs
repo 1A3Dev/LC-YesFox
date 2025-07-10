@@ -326,7 +326,7 @@ namespace YesFox
                 Plugin.StaticLogger.LogInfo("Generating per-moon fox & weed configs...");
                 foreach (SelectableLevel level in startOfRoundInstance.levels)
                 {
-                    if (!level.spawnEnemiesAndScrap) continue;
+                    if (level.levelID == 3 || !level.spawnEnemiesAndScrap) continue;
 
                     string planetName = level.PlanetName;
                     string sanitizedName = new string(planetName.Where(c => char.IsLetterOrDigit(c) || char.IsWhiteSpace(c)).ToArray()).Trim();
