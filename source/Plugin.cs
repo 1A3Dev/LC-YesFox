@@ -753,7 +753,7 @@ namespace YesFox
             {
                 // vanilla defaults to 0, when it should be -1
                 if (moldStartPosition == 0)
-                    Plugin.logSource.LogDebug($"Spawn bug has been blocked on {__instance.currentLevel.name}");
+                    Plugin.StaticLogger.LogDebug($"Spawn bug has been blocked on {__instance.currentLevel.name}");
 
                 moldStartPosition = -1;
             }
@@ -774,7 +774,7 @@ namespace YesFox
             SelectableLevel previousLevel = (SelectableLevel)__state[0];
 
             if (!__instance.IsServer)
-                Plugin.logSource.LogDebug($"Landed on {__instance.currentLevel.name} - previous moon was {previousLevel.name}");
+                Plugin.StaticLogger.LogDebug($"Landed on {__instance.currentLevel.name} - previous moon was {previousLevel.name}");
 
             // when landing on the same moon twice in a row, there's no problem
             if (__instance.currentLevel == previousLevel)
@@ -785,18 +785,18 @@ namespace YesFox
 
             if (previousLevel.moldSpreadIterations != previousMoldSpreadIterations || previousLevel.moldStartPosition != previousMoldStartPosition)
             {
-                Plugin.logSource.LogDebug($"Data for {previousLevel.name} was erroneously overwritten: {previousMoldSpreadIterations} iterations at node #{previousMoldStartPosition} -> {previousLevel.moldSpreadIterations} iterations at node #{previousLevel.moldStartPosition}");
+                Plugin.StaticLogger.LogDebug($"Data for {previousLevel.name} was erroneously overwritten: {previousMoldSpreadIterations} iterations at node #{previousMoldStartPosition} -> {previousLevel.moldSpreadIterations} iterations at node #{previousLevel.moldStartPosition}");
 
                 previousLevel.moldSpreadIterations = previousMoldSpreadIterations;
                 previousLevel.moldStartPosition = previousMoldStartPosition;
 
-                Plugin.logSource.LogDebug($"Restored original data for {previousLevel.name}");
+                Plugin.StaticLogger.LogDebug($"Restored original data for {previousLevel.name}");
             }
 
             __instance.currentLevel.moldSpreadIterations = moldIterations;
             __instance.currentLevel.moldStartPosition = moldStartPosition;
 
-            Plugin.logSource.LogDebug($"Applied growth data properly to {__instance.currentLevel.name}");
+            Plugin.StaticLogger.LogDebug($"Applied growth data properly to {__instance.currentLevel.name}");
         }
     }
 }
