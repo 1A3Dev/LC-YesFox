@@ -623,5 +623,59 @@ namespace YesFox
             //Plugin.Logger.LogWarning($"{__originalMethod.Name} transpiler failed");
             return codes;
         }
+
+        [HarmonyPatch(typeof(RoundManager), nameof(RoundManager.GenerateNewLevelClientRpc))]
+        [HarmonyPrefix]
+        static void Pre_GenerateNewLevelClientRpc(RoundManager __instance, int moldIterations, ref int moldStartPosition, ref object[] __state)
+        {
+            if (moldIterations < 1)
+            {
+                // vanilla defaults to 0, when it should be -1
+                if (moldStartPosition == 0)
+                    Plugin.logSource.LogDebug($"Spawn bug has been blocked on {__instance.currentLevel.name}");
+
+                moldStartPosition = -1;
+            }
+
+            // save some locals
+            __state =
+            [
+                __instance.currentLevel,
+                __instance.currentLevel.moldSpreadIterations,
+                __instance.currentLevel.moldStartPosition
+            ];
+        }
+
+        [HarmonyPatch(typeof(RoundManager), nameof(RoundManager.GenerateNewLevelClientRpc))]
+        [HarmonyPostfix]
+        static void Post_GenerateNewLevelClientRpc(RoundManager __instance, int moldIterations, ref int moldStartPosition, object[] __state)
+        {
+            SelectableLevel previousLevel = (SelectableLevel)__state[0];
+
+            if (!__instance.IsServer)
+                Plugin.logSource.LogDebug($"Landed on {__instance.currentLevel.name} - previous moon was {previousLevel.name}");
+
+            // when landing on the same moon twice in a row, there's no problem
+            if (__instance.currentLevel == previousLevel)
+                return;
+
+            int previousMoldSpreadIterations = (int)__state[1];
+            int previousMoldStartPosition = (int)__state[2];
+
+            if (previousLevel.moldSpreadIterations != previousMoldSpreadIterations || previousLevel.moldStartPosition != previousMoldStartPosition)
+            {
+                Plugin.logSource.LogDebug($"Data for {previousLevel.name} was erroneously overwritten: {previousMoldSpreadIterations} iterations at node #{previousMoldStartPosition} -> {previousLevel.moldSpreadIterations} iterations at node #{previousLevel.moldStartPosition}");
+
+                previousLevel.moldSpreadIterations = previousMoldSpreadIterations;
+                previousLevel.moldStartPosition = previousMoldStartPosition;
+
+                Plugin.logSource.LogDebug($"Restored original data for {previousLevel.name}");
+            }
+
+            __instance.currentLevel.moldSpreadIterations = moldIterations;
+            __instance.currentLevel.moldStartPosition = moldStartPosition;
+
+            Plugin.logSource.LogDebug($"Applied growth data properly to {__instance.currentLevel.name}");
+        }
     }
 }
