@@ -21,7 +21,8 @@ namespace YesFox
     {
         private readonly Harmony harmony = new Harmony(MyPluginInfo.PLUGIN_GUID);
 
-        internal static ManualLogSource logSource;
+        internal static ManualLogSource StaticLogger { get; private set; }
+        internal static ConfigFile StaticConfig { get; private set; }
 
         internal static List<GameObject> _networkPrefabs = new List<GameObject>();
         public static GameObject BushWolfAddonPrefab { get; internal set; }
@@ -35,19 +36,31 @@ namespace YesFox
         internal static ConfigEntry<float> Shroud_MinimumDistance;
         internal static ConfigEntry<int> Fox_MinimumWeeds;
         internal static ConfigEntry<int> Fox_SpawnChance;
+        internal static Dictionary<string, ConfigEntry<bool>> Shroud_MoonToggles = [];
+        internal static Dictionary<string, ConfigEntry<bool>> WeedOverridesEnabled = [];
+        internal static Dictionary<string, ConfigEntry<bool>> FoxOverridesEnabled = [];
+        internal static Dictionary<string, ConfigEntry<float>> Shroud_MoonSpawnChanceSameMoonOverrides = [];
+        internal static Dictionary<string, ConfigEntry<float>> Shroud_MoonSpawnChanceOtherMoonsOverrides = [];
+        internal static Dictionary<string, ConfigEntry<float>> Shroud_MoonGrowChanceSameMoonOverrides = [];
+        internal static Dictionary<string, ConfigEntry<float>> Shroud_MoonGrowChanceOtherMoonsOverrides = [];
+        internal static Dictionary<string, ConfigEntry<int>> Shroud_MoonMaxIterationOverrides = [];
+        internal static Dictionary<string, ConfigEntry<float>> Shroud_MoonMinDistanceOverrides = [];
+        internal static Dictionary<string, ConfigEntry<int>> Fox_MinimumWeedsOverrides = [];
+        internal static Dictionary<string, ConfigEntry<int>> Fox_SpawnChanceOverrides = [];
 
         private void Awake()
         {
-            logSource = Logger;
+            StaticLogger = Logger;
+            StaticConfig = Config;
 
             Assembly patches = Assembly.GetExecutingAssembly();
             harmony.PatchAll(patches);
-            logSource.LogInfo("Patches Loaded");
+            StaticLogger.LogInfo("Patches Loaded");
 
             AssetBundle BushWolfBundle = AssetBundle.LoadFromFile(Path.Combine(Path.GetDirectoryName(Info.Location), "bush_wolf"));
             if (BushWolfBundle == null)
             {
-                logSource.LogError("[AssetBundle] Failed to load asset bundle: bush_wolf");
+                StaticLogger.LogError("[AssetBundle] Failed to load asset bundle: bush_wolf");
                 return;
             }
             BushWolfAddonPrefab = BushWolfBundle.LoadAsset<GameObject>("Assets/LethalCompany/Game/Prefabs/EnemyAI/BushWolfEnemy.prefab");
@@ -55,11 +68,11 @@ namespace YesFox
             {
                 if (!_networkPrefabs.Contains(BushWolfAddonPrefab))
                     _networkPrefabs.Add(BushWolfAddonPrefab);
-                logSource.LogInfo("[AssetBundle] Successfully loaded prefab: BushWolfEnemy");
+                StaticLogger.LogInfo("[AssetBundle] Successfully loaded prefab: BushWolfEnemy");
             }
             else
             {
-                logSource.LogError("[AssetBundle] Failed to load prefab: BushWolfEnemy");
+                StaticLogger.LogError("[AssetBundle] Failed to load prefab: BushWolfEnemy");
             }
 
             Shroud_AllMoons = Config.Bind("Weed Spawning", "All Moons", false, "Should weeds be able to spawn on all moons excluding gordion?");
@@ -79,6 +92,8 @@ namespace YesFox
     [HarmonyPatch]
     internal static class HarmonyPatches
     {
+        private static bool perMoonConfigsGenerated = false;
+
         [HarmonyPatch(typeof(GameNetworkManager), "Start")]
         [HarmonyPostfix]
         private static void GameNetworkManager_Start(GameNetworkManager __instance)
@@ -118,61 +133,87 @@ namespace YesFox
             }
         }
 
-        [HarmonyPatch(typeof(StartOfRound), "SetPlanetsMold")]
-        [HarmonyPrefix]
-        public static bool SetPlanetsMold(StartOfRound __instance)
+        private static T GetValue<T>(string planetName, Dictionary<string, ConfigEntry<bool>> overrideEnabledDict, Dictionary<string, ConfigEntry<T>> overrideValueDict, ConfigEntry<T> globalValue)
         {
-            if (!__instance.IsOwner) return false;
-
-            System.Random random = new System.Random(__instance.randomMapSeed + 32);
-            Terminal terminal = Object.FindAnyObjectByType<Terminal>();
-            for (int i = 0; i < __instance.levels.Length; i++)
+            bool overridesEnabled = overrideEnabledDict.TryGetValue(planetName, out var enabledConfig) && enabledConfig.Value;
+            if (overridesEnabled && overrideValueDict.TryGetValue(planetName, out var valueConfig))
             {
-                if (i == 3 || (!__instance.levels[i].canSpawnMold && !Plugin.Shroud_AllMoons.Value))
+                return valueConfig.Value;
+            }
+            return globalValue.Value;
+        }
+
+        [HarmonyPatch(typeof(TimeOfDay), "OnDayChanged")]
+        [HarmonyPostfix]
+        public static void OnDayChanged(TimeOfDay __instance)
+        {
+            if (!__instance.IsOwner || StartOfRound.Instance.isChallengeFile) return;
+            
+            System.Random random = new System.Random(StartOfRound.Instance.randomMapSeed + 32);
+            Terminal terminal = Object.FindAnyObjectByType<Terminal>();
+            for (int i = 0; i < StartOfRound.Instance.levels.Length; i++)
+            {
+                SelectableLevel level = StartOfRound.Instance.levels[i];
+                string planetName = level.PlanetName;
+                
+                bool canSpawnOnMoon = Plugin.Shroud_MoonToggles.TryGetValue(planetName, out var toggleConfig) ? toggleConfig.Value : level.canSpawnMold;
+
+                if (i == 3 || (!canSpawnOnMoon && !Plugin.Shroud_AllMoons.Value))
                 {
-                    Plugin.logSource.LogInfo($"Skipping level #{i} {__instance.levels[i].PlanetName} mold iterations");
+                    Plugin.StaticLogger.LogInfo($"Skipping level #{i} {level.PlanetName} mold iterations");
                     continue;
                 }
 
-                if (__instance.levels[i].moldSpreadIterations > 0)
+                int maxIterations = GetValue(planetName, Plugin.WeedOverridesEnabled, Plugin.Shroud_MoonMaxIterationOverrides, Plugin.Shroud_MaximumIterations);
+
+                if (level.moldSpreadIterations > 0)
                 {
-                    if (__instance.levels[i].moldSpreadIterations < Plugin.Shroud_MaximumIterations.Value)
+                    if (level.moldSpreadIterations < maxIterations)
                     {
-                        float chance = (__instance.levels[i] == __instance.currentLevel ? Plugin.Shroud_GrowChance_SameMoon.Value : Plugin.Shroud_GrowChance_OtherMoons.Value) / 100f;
-                        if (random.NextDouble() <= chance)
+                        bool isCurrentMoon = level == StartOfRound.Instance.currentLevel;
+                        float chance = isCurrentMoon
+                            ? GetValue(planetName, Plugin.WeedOverridesEnabled, Plugin.Shroud_MoonGrowChanceSameMoonOverrides, Plugin.Shroud_GrowChance_SameMoon)
+                            : GetValue(planetName, Plugin.WeedOverridesEnabled, Plugin.Shroud_MoonGrowChanceOtherMoonsOverrides, Plugin.Shroud_GrowChance_OtherMoons);
+                            
+                        if (random.NextDouble() <= chance / 100f)
                         {
-                            __instance.levels[i].moldSpreadIterations++;
-                            Plugin.logSource.LogInfo($"Increasing level #{i} {__instance.levels[i].PlanetName} mold iterations by 1; risen to {__instance.levels[i].moldSpreadIterations}");
+                            level.moldSpreadIterations++;
+                            Plugin.StaticLogger.LogInfo($"Increasing level #{i} {level.PlanetName} mold iterations by 1; risen to {level.moldSpreadIterations}");
                         }
                     }
                     continue;
                 }
 
                 float num;
-                if (__instance.levels[i] == __instance.currentLevel)
+                bool isCurrentMoonForSpawn = level == StartOfRound.Instance.currentLevel;
+                bool weedOverridesEnabled = Plugin.WeedOverridesEnabled.TryGetValue(planetName, out var enabledConfig) && enabledConfig.Value;
+
+                if (isCurrentMoonForSpawn)
                 {
-                    num = Plugin.Shroud_SpawnChance_SameMoon.Value / 100f;
+                    num = GetValue(planetName, Plugin.WeedOverridesEnabled, Plugin.Shroud_MoonSpawnChanceSameMoonOverrides, Plugin.Shroud_SpawnChance_SameMoon) / 100f;
                 }
                 else
                 {
-                    num = Plugin.Shroud_SpawnChance_OtherMoons.Value / 100f;
-                    if (terminal.groupCredits < 200 && __instance.levels[i].levelID == 12)
+                    num = GetValue(planetName, Plugin.WeedOverridesEnabled, Plugin.Shroud_MoonSpawnChanceOtherMoonsOverrides, Plugin.Shroud_SpawnChance_OtherMoons) / 100f;
+                    if (!weedOverridesEnabled) // Only apply vanilla logic if not using overrides
                     {
-                        num *= 1.25f; // 0.04 -> 0.05 (vanilla)
-                    }
-                    else if (terminal.groupCredits < 500 && (__instance.levels[i].levelID == 7 || __instance.levels[i].levelID == 6 || __instance.levels[i].levelID >= 10) && (__instance.currentLevel.levelID == 5 || __instance.currentLevel.levelID == 8 || __instance.currentLevel.levelID == 4 || __instance.currentLevel.levelID <= 2))
-                    {
-                        num *= 0.5f; // 0.04 -> 0.02 (vanilla)
+                        if (terminal.groupCredits < 200 && level.levelID == 12)
+                        {
+                            num *= 1.25f; // 0.04 -> 0.05 (vanilla)
+                        }
+                        else if (terminal.groupCredits < 500 && (level.levelID == 7 || level.levelID == 6 || level.levelID >= 10) && (StartOfRound.Instance.currentLevel.levelID == 5 || StartOfRound.Instance.currentLevel.levelID == 8 || StartOfRound.Instance.currentLevel.levelID == 4 || StartOfRound.Instance.currentLevel.levelID <= 2))
+                        {
+                            num *= 0.5f; // 0.04 -> 0.02 (vanilla)
+                        }
                     }
                 }
+
                 if (random.NextDouble() <= num)
                 {
-                    __instance.levels[i].moldSpreadIterations += random.Next(1, 3);
-                    Plugin.logSource.LogInfo($"Increasing level #{i} {__instance.levels[i].PlanetName} mold iterations for the first time; risen to {__instance.levels[i].moldSpreadIterations}");
+                    level.moldSpreadIterations += random.Next(1, 3);
+                    Plugin.StaticLogger.LogInfo($"Increasing level #{i} {level.PlanetName} mold iterations for the first time; risen to {level.moldSpreadIterations}");
                 }
             }
-
-            return false;
         }
 
         // called after the scene (and AI nodes) load, but before LoadNewLevelWait selects a start position
@@ -183,24 +224,29 @@ namespace YesFox
             if (!__instance.IsServer || __instance.currentLevel.moldSpreadIterations < 1)
                 return;
 
-            if (!__instance.currentLevel.canSpawnMold && !Plugin.Shroud_AllMoons.Value)
+            string planetName = __instance.currentLevel.PlanetName;
+            bool canSpawnOnMoon = Plugin.Shroud_MoonToggles.TryGetValue(planetName, out var toggleConfig) ? toggleConfig.Value : __instance.currentLevel.canSpawnMold;
+
+            if (!canSpawnOnMoon && !Plugin.Shroud_AllMoons.Value)
             {
                 __instance.currentLevel.moldSpreadIterations = 0;
                 __instance.currentLevel.moldStartPosition = -1;
                 return;
             }
 
+            int maxIterations = GetValue(planetName, Plugin.WeedOverridesEnabled, Plugin.Shroud_MoonMaxIterationOverrides, Plugin.Shroud_MaximumIterations);
+
             // retroactively apply iteration cap to old save files
-            if (__instance.currentLevel.moldSpreadIterations > Plugin.Shroud_MaximumIterations.Value)
+            if (__instance.currentLevel.moldSpreadIterations > maxIterations)
             {
-                __instance.currentLevel.moldSpreadIterations = Plugin.Shroud_MaximumIterations.Value;
+                __instance.currentLevel.moldSpreadIterations = maxIterations;
             }
 
             GameObject[] outsideAINodes = GameObject.FindGameObjectsWithTag("OutsideAINode");
             if (outsideAINodes == null || outsideAINodes.Length < 1)
                 return;
 
-            Vector3 shipPos = new(1.27146339f, 0.278438568f, -7.5f); // StartOfRound.elevatorTransform position, when fully landed
+            Vector3 shipPos = StartOfRound.Instance.shipLandingPosition.position; // StartOfRound.elevatorTransform position, when fully landed
 
             outsideAINodes = [.. outsideAINodes.OrderBy(x => Vector3.Distance(x.transform.position, shipPos))];
 
@@ -213,10 +259,13 @@ namespace YesFox
                 if (shipDist >= 30f)
                     return;
 
-                Plugin.logSource.LogInfo($"Mold growth is starting from node #{__instance.currentLevel.moldStartPosition} which is too close to the ship ({shipDist} < 30)");
+                Plugin.StaticLogger.LogInfo($"Mold growth is starting from node #{__instance.currentLevel.moldStartPosition} which is too close to the ship ({shipDist} < 30)");
             }
 
             // starting point has not been chosen, or was invalid
+
+            float minDistance = GetValue(planetName, Plugin.WeedOverridesEnabled, Plugin.Shroud_MoonMinDistanceOverrides, Plugin.Shroud_MinimumDistance);
+            int minWeeds = GetValue(planetName, Plugin.FoxOverridesEnabled, Plugin.Fox_MinimumWeedsOverrides, Plugin.Fox_MinimumWeeds);
 
             System.Random random = new System.Random(__instance.randomMapSeed + 2017);
             int temp = __instance.currentLevel.moldSpreadIterations; // preserve
@@ -224,37 +273,37 @@ namespace YesFox
             {
                 float shipDist = Vector3.Distance(outsideAINodes[i].transform.position, shipPos);
                 // greater than 40 units and selected randomly
-                if (shipDist >= Plugin.Shroud_MinimumDistance.Value && (random.Next(100) < 13 || outsideAINodes.Length - i < 20))
+                if (shipDist >= minDistance && (random.Next(100) < 13 || outsideAINodes.Length - i < 20))
                 {
-                    Plugin.logSource.LogDebug($"Mold growth: outsideAINodes[{i}] is candidate (ship dist: {shipDist} > {Plugin.Shroud_MinimumDistance.Value})");
+                    Plugin.StaticLogger.LogDebug($"Mold growth: outsideAINodes[{i}] is candidate (ship dist: {shipDist} > {minDistance})");
                     // furthest distance in vanilla is on Artifice (7.88802)
                     if (Physics.Raycast(outsideAINodes[i].transform.position, Vector3.down, out RaycastHit hit, 8f, StartOfRound.Instance.collidersAndRoomMaskAndDefault, QueryTriggerInteraction.Ignore))
                     {
                         // final test... can the fox spawn here?
 
                         // must simulate weed growth, there aren't any shortcuts for this
-                        MoldSpreadManager.GenerateMold(outsideAINodes[i].transform.position, Plugin.Shroud_MaximumIterations.Value);
+                        MoldSpreadManager.GenerateMold(outsideAINodes[i].transform.position, maxIterations);
                         int amt = MoldSpreadManager.generatedMold.Count;
                         MoldSpreadManager.RemoveAllMold();
 
-                        if (amt >= Plugin.Fox_MinimumWeeds.Value)
+                        if (amt >= minWeeds)
                         {
                             __instance.currentLevel.moldStartPosition = i;
                             __instance.currentLevel.moldSpreadIterations = temp;
-                            Plugin.logSource.LogInfo($"Mold growth: Selected outsideAINodes[{i}]: coords {outsideAINodes[i].transform.position}, dist {shipDist}");
+                            Plugin.StaticLogger.LogInfo($"Mold growth: Selected outsideAINodes[{i}]: coords {outsideAINodes[i].transform.position}, dist {shipDist}");
                             return;
                         }
                         else
-                            Plugin.logSource.LogDebug($"Mold growth: outsideAINodes[{i}] rejected (max weeds: {amt} < {Plugin.Fox_MinimumWeeds.Value})");
+                            Plugin.StaticLogger.LogDebug($"Mold growth: outsideAINodes[{i}] rejected (max weeds: {amt} < {minWeeds})");
                     }
                     else
-                        Plugin.logSource.LogDebug($"Mold growth: outsideAINodes[{i}] rejected (no ground)");
+                        Plugin.StaticLogger.LogDebug($"Mold growth: outsideAINodes[{i}] rejected (no ground)");
                 }
             }
 
             __instance.currentLevel.moldSpreadIterations = 0;
             __instance.currentLevel.moldStartPosition = -1;
-            Plugin.logSource.LogInfo($"Level \"{__instance.currentLevel.PlanetName}\" has no valid AI nodes");
+            Plugin.StaticLogger.LogInfo($"Level \"{__instance.currentLevel.PlanetName}\" has no valid AI nodes");
         }
 
         // v64
@@ -264,9 +313,74 @@ namespace YesFox
         [HarmonyPatch(typeof(StartOfRound), "Start")]
         [HarmonyPrefix]
         [HarmonyPriority(Priority.First)]
-        private static void StartOfRound_Start()
+        private static void StartOfRound_Start(StartOfRound __instance)
         {
+            GeneratePerMoonConfigsIfNeeded(__instance);
             GenerateWeedEnemiesList();
+        }
+
+        private static void GeneratePerMoonConfigsIfNeeded(StartOfRound startOfRoundInstance)
+        {
+            if (!perMoonConfigsGenerated && Plugin.StaticConfig != null)
+            {
+                Plugin.StaticLogger.LogInfo("Generating per-moon fox & weed configs...");
+                foreach (SelectableLevel level in startOfRoundInstance.levels)
+                {
+                    if (level.levelID == 3 || !level.spawnEnemiesAndScrap) continue;
+
+                    string planetName = level.PlanetName;
+                    string sanitizedName = new string(planetName.Where(c => char.IsLetterOrDigit(c) || char.IsWhiteSpace(c)).ToArray()).Trim();
+                    string overrideSection = $"Moon Overrides.{sanitizedName}";
+
+                    Plugin.Shroud_MoonToggles.TryAdd(planetName, Plugin.StaticConfig.Bind(
+                        overrideSection, "Enable Weed Spawning", level.canSpawnMold,
+                        $"Controls whether weeds can spawn on {planetName} at all. This is the master switch for this moon."
+                    ));
+
+                    Plugin.WeedOverridesEnabled.TryAdd(planetName, Plugin.StaticConfig.Bind(
+                        overrideSection, "Enable Weed Overrides", false,
+                        $"Enable per-moon overrides for weed settings (spawn/growth chance, etc). If this is false, the global settings will be used."
+                    ));
+
+                    Plugin.Shroud_MoonSpawnChanceSameMoonOverrides.TryAdd(planetName, Plugin.StaticConfig.Bind(
+                        overrideSection, "Spawn Chance (While Routed)", Plugin.Shroud_SpawnChance_SameMoon.Value,
+                        new ConfigDescription($"Override the weed spawn chance for {planetName} when you are currently routed to it.", new AcceptableValueRange<float>(0f, 100f))
+                    ));
+                    Plugin.Shroud_MoonSpawnChanceOtherMoonsOverrides.TryAdd(planetName, Plugin.StaticConfig.Bind(
+                        overrideSection, "Spawn Chance (While Not Routed)", Plugin.Shroud_SpawnChance_OtherMoons.Value,
+                        new ConfigDescription($"Override the weed spawn chance for {planetName} when you are routed to another moon.", new AcceptableValueRange<float>(0f, 100f))
+                    ));
+                    Plugin.Shroud_MoonGrowChanceSameMoonOverrides.TryAdd(planetName, Plugin.StaticConfig.Bind(
+                        overrideSection, "Growth Chance (While Routed)", Plugin.Shroud_GrowChance_SameMoon.Value,
+                        new ConfigDescription($"Override the weed growth chance for {planetName} when you are currently routed to it.", new AcceptableValueRange<float>(0f, 100f))
+                    ));
+                    Plugin.Shroud_MoonGrowChanceOtherMoonsOverrides.TryAdd(planetName, Plugin.StaticConfig.Bind(
+                        overrideSection, "Growth Chance (While Not Routed)", Plugin.Shroud_GrowChance_OtherMoons.Value,
+                        new ConfigDescription($"Override the weed growth chance for {planetName} when you are routed to another moon.", new AcceptableValueRange<float>(0f, 100f))
+                    ));
+                    Plugin.Shroud_MoonMaxIterationOverrides.TryAdd(planetName, Plugin.StaticConfig.Bind(
+                        overrideSection, "Maximum Iterations", Plugin.Shroud_MaximumIterations.Value,
+                        new ConfigDescription($"Override the global maximum weed iterations for {planetName}.", new AcceptableValueRange<int>(1, 20))
+                    ));
+                    Plugin.Shroud_MoonMinDistanceOverrides.TryAdd(planetName, Plugin.StaticConfig.Bind(
+                        overrideSection, "Minimum Distance", Plugin.Shroud_MinimumDistance.Value,
+                        new ConfigDescription($"Override the global minimum distance for weed growth on {planetName}.", new AcceptableValueRange<float>(30f, 70f))
+                    ));
+                    Plugin.FoxOverridesEnabled.TryAdd(planetName, Plugin.StaticConfig.Bind(
+                        overrideSection, "Enable Fox Overrides", false,
+                        $"Enable per-moon overrides for fox settings (minimum weeds, spawn chance). If this is false, the global settings will be used."
+                    ));
+                    Plugin.Fox_MinimumWeedsOverrides.TryAdd(planetName, Plugin.StaticConfig.Bind(
+                        overrideSection, "Fox Minimum Weeds", Plugin.Fox_MinimumWeeds.Value,
+                        new ConfigDescription($"Override the minimum weeds required for a fox to spawn on {planetName}.")
+                    ));
+                    Plugin.Fox_SpawnChanceOverrides.TryAdd(planetName, Plugin.StaticConfig.Bind(
+                        overrideSection, "Fox Spawn Chance", Plugin.Fox_SpawnChance.Value,
+                        new ConfigDescription($"Override the spawn chance for a fox on {planetName}. Set to -1 to use the vanilla spawn logic.", new AcceptableValueRange<int>(-1, 100))
+                    ));
+                }
+                perMoonConfigsGenerated = true;
+            }
         }
 
         public static void GenerateWeedEnemiesList()
@@ -283,7 +397,7 @@ namespace YesFox
                         if (Plugin.BushWolfAddonPrefab.GetComponent<EnemyAI>() != null)
                         {
                             Plugin.BushWolfAddonPrefab.GetComponent<EnemyAI>().enemyType = bushWolfTypeOrig;
-                            Plugin.logSource.LogInfo("[GenerateWeedEnemiesList] BushWolf: Replaced addon EnemyAI enemyType");
+                            Plugin.StaticLogger.LogInfo("[GenerateWeedEnemiesList] BushWolf: Replaced addon EnemyAI enemyType");
                         }
 
                         SkinnedMeshRenderer rendererOrig = bushWolfTypeOrig.enemyPrefab?.GetComponentsInChildren<SkinnedMeshRenderer>().FirstOrDefault(rend => rend.sharedMaterials.Length > 1);
@@ -302,7 +416,7 @@ namespace YesFox
                         }
 
                         bushWolfTypeOrig.enemyPrefab = Plugin.BushWolfAddonPrefab;
-                        Plugin.logSource.LogInfo("[GenerateWeedEnemiesList] BushWolf: Replaced original EnemyType prefab");
+                        Plugin.StaticLogger.LogInfo("[GenerateWeedEnemiesList] BushWolf: Replaced original EnemyType prefab");
                     }
 
                     WeedEnemies.Add(new SpawnableEnemyWithRarity()
@@ -314,28 +428,35 @@ namespace YesFox
             }
             catch (Exception e)
             {
-                Plugin.logSource.LogError(e);
+                Plugin.StaticLogger.LogError(e);
             }
         }
 
-        public static void SpawnWeedEnemies(int currentHour)
+        public static void SpawnWeedEnemies(int currentHour, SelectableLevel currentLevel)
         {
             int num = 0;
             if (MoldSpreadManager != null)
             {
                 num = MoldSpreadManager.generatedMold.Count(x => x != null && x.activeSelf);
             }
-            if (num < Plugin.Fox_MinimumWeeds.Value)
+
+            string planetName = currentLevel.PlanetName;
+            int minWeeds = GetValue(planetName, Plugin.FoxOverridesEnabled, Plugin.Fox_MinimumWeedsOverrides, Plugin.Fox_MinimumWeeds);
+
+            if (num < minWeeds)
             {
-                Plugin.logSource.LogDebug($"Weed enemies attempted to spawn but were denied. Reason: WeedCount | Amount: {num}");
+                Plugin.StaticLogger.LogDebug($"Weed enemies attempted to spawn but were denied. Reason: WeedCount | Amount: {num}");
                 return;
             }
-            if (Plugin.Fox_SpawnChance.Value >= 0)
+
+            int foxSpawnChance = GetValue(planetName, Plugin.FoxOverridesEnabled, Plugin.Fox_SpawnChanceOverrides, Plugin.Fox_SpawnChance);
+
+            if (foxSpawnChance >= 0)
             {
                 int spawnChance = WeedEnemySpawnRandom.Next(1, 100);
-                if (spawnChance > Plugin.Fox_SpawnChance.Value)
+                if (spawnChance > foxSpawnChance)
                 {
-                    Plugin.logSource.LogDebug($"Weed enemies attempted to spawn but were denied. Reason: SpawnChance | Amount: {spawnChance}");
+                    Plugin.StaticLogger.LogDebug($"Weed enemies attempted to spawn but were denied. Reason: SpawnChance | Amount: {spawnChance}");
                     return;
                 }
             }
@@ -344,7 +465,7 @@ namespace YesFox
                 int spawnChance = WeedEnemySpawnRandom.Next(0, 80);
                 if (spawnChance > num)
                 {
-                    Plugin.logSource.LogDebug($"Weed enemies attempted to spawn but were denied. Reason: SpawnChance | Amount: {spawnChance}");
+                    Plugin.StaticLogger.LogDebug($"Weed enemies attempted to spawn but were denied. Reason: SpawnChance | Amount: {spawnChance}");
                     return;
                 }
             }
@@ -357,7 +478,7 @@ namespace YesFox
                 GenerateWeedEnemiesList();
                 if (WeedEnemies.Count == 0)
                 {
-                    Plugin.logSource.LogError($"Weed enemies attempted to spawn but were denied. Reason: ListEmpty");
+                    Plugin.StaticLogger.LogError($"Weed enemies attempted to spawn but were denied. Reason: ListEmpty");
                     return;
                 }
             }
@@ -385,7 +506,7 @@ namespace YesFox
                 if (enemyType.PowerLevel > RoundManager.Instance.currentMaxOutsidePower - RoundManager.Instance.currentOutsideEnemyPower || enemyType.numberSpawned >= enemyType.MaxCount || enemyType.spawningDisabled)
                 {
                     RoundManager.Instance.SpawnProbabilities.Add(0);
-                    Plugin.logSource.LogDebug($"A weed enemy attempted to spawn but was denied. Reason: Probability | Amount: 0");
+                    Plugin.StaticLogger.LogDebug($"A weed enemy attempted to spawn but was denied. Reason: Probability | Amount: 0");
                     continue;
                 }
                 int num2 = ((RoundManager.Instance.increasedOutsideEnemySpawnRateIndex == i) ? 100 : ((!enemyType.useNumberSpawnedFalloff) ? ((int)((float)WeedEnemies[i].rarity * enemyType.probabilityCurve.Evaluate(timeUpToCurrentHour / RoundManager.Instance.timeScript.totalTime))) : ((int)((float)WeedEnemies[i].rarity * (enemyType.probabilityCurve.Evaluate(timeUpToCurrentHour / RoundManager.Instance.timeScript.totalTime) * enemyType.numberSpawnedFalloff.Evaluate((float)enemyType.numberSpawned / 10f))))));
@@ -399,7 +520,7 @@ namespace YesFox
             RoundManager.Instance.firstTimeSpawningWeedEnemies = false;
             if (num <= 0)
             {
-                Plugin.logSource.LogDebug($"A weed enemy attempted to spawn but was denied. Reason: SpawnRate | Amount: {num}");
+                Plugin.StaticLogger.LogDebug($"A weed enemy attempted to spawn but was denied. Reason: SpawnRate | Amount: {num}");
                 return false;
             }
             bool result = false;
@@ -411,7 +532,7 @@ namespace YesFox
                 float currentOutsideEnemyPower = RoundManager.Instance.currentMaxOutsidePower - RoundManager.Instance.currentOutsideEnemyPower;
                 if (enemyType2.PowerLevel > currentOutsideEnemyPower)
                 {
-                    Plugin.logSource.LogDebug($"A weed enemy attempted to spawn but was denied. Reason: PowerLevel | Amount: {currentOutsideEnemyPower}");
+                    Plugin.StaticLogger.LogDebug($"A weed enemy attempted to spawn but was denied. Reason: PowerLevel | Amount: {currentOutsideEnemyPower}");
                     break;
                 }
                 RoundManager.Instance.currentOutsideEnemyPower += enemyType2.PowerLevel;
@@ -424,7 +545,7 @@ namespace YesFox
                 gameObject.GetComponent<EnemyAI>().enemyType.numberSpawned++;
                 result = true;
             }
-            Plugin.logSource.LogDebug($"{enemyType2.enemyName} attempted to spawn and was allowed");
+            Plugin.StaticLogger.LogDebug($"{enemyType2.enemyName} attempted to spawn and was allowed");
             return result;
         }
 
@@ -441,7 +562,7 @@ namespace YesFox
         {
             if (GameNetworkManager.Instance.gameVersionNum >= 64)
             {
-                SpawnWeedEnemies(__instance.currentHour + __instance.hourTimeBetweenEnemySpawnBatches);
+                SpawnWeedEnemies(__instance.currentHour + __instance.hourTimeBetweenEnemySpawnBatches, StartOfRound.Instance.currentLevel);
             }
         }
 
@@ -497,7 +618,7 @@ namespace YesFox
         {
             if (__instance.iterationsThisDay < 1 && iterations > 0)
             {
-                Plugin.logSource.LogInfo($"Mold growth on \"{StartOfRound.Instance.currentLevel.PlanetName}\" erroneously reset from {iterations} iterations");
+                Plugin.StaticLogger.LogInfo($"Mold growth on \"{StartOfRound.Instance.currentLevel.PlanetName}\" erroneously reset from {iterations} iterations");
                 StartOfRound.Instance.currentLevel.moldSpreadIterations = iterations;
                 StartOfRound.Instance.currentLevel.moldStartPosition = __state;
             }
@@ -536,7 +657,7 @@ namespace YesFox
                     {
                         codes[i].opcode = OpCodes.Ldsfld;
                         codes[i].operand = AccessTools.Field(typeof(HarmonyPatches), nameof(vehicleController));
-                        Plugin.logSource.LogDebug($"Use cached VehicleController in Kidnapper Fox AI");
+                        Plugin.StaticLogger.LogDebug($"Use cached VehicleController in Kidnapper Fox AI");
                         break;
                     }
                 }
@@ -565,7 +686,7 @@ namespace YesFox
                     if (methodName.Contains("FindObjectOfType") && methodName.Contains("MoldSpreadManager"))
                     {
                         codes[i].operand = MOLD_SPREAD_MANAGER_INSTANCE;
-                        Plugin.logSource.LogDebug($"Use cached MoldSpreadManager in {__originalMethod.DeclaringType}.{__originalMethod.Name}");
+                        Plugin.StaticLogger.LogDebug($"Use cached MoldSpreadManager in {__originalMethod.DeclaringType}.{__originalMethod.Name}");
                     }
                 }
             }
@@ -606,7 +727,7 @@ namespace YesFox
                         codes[i - 1].opcode = OpCodes.Nop;
                         //codes[i - 1].operand = null;
 
-                        Plugin.logSource.LogDebug($"Use cached MoldAttractionPoint in {__originalMethod.DeclaringType}.{__originalMethod.Name}");
+                        Plugin.StaticLogger.LogDebug($"Use cached MoldAttractionPoint in {__originalMethod.DeclaringType}.{__originalMethod.Name}");
                     }
                     else if (methodInfo == FIND_GAME_OBJECTS_WITH_TAG && codes[i - 1].opcode == OpCodes.Ldstr && (string)codes[i - 1].operand == "MoldSpore")
                     {
@@ -615,7 +736,7 @@ namespace YesFox
                         codes[i - 1].opcode = OpCodes.Nop;
                         //codes[i - 1].operand = null;
 
-                        Plugin.logSource.LogDebug($"Use cached MoldSpore game objects in {__originalMethod.DeclaringType}.{__originalMethod.Name}");
+                        Plugin.StaticLogger.LogDebug($"Use cached MoldSpore game objects in {__originalMethod.DeclaringType}.{__originalMethod.Name}");
                     }
                 }
             }

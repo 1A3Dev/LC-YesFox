@@ -1,3 +1,15 @@
+### 1.1.6
+
+- Re-built for v73
+
+### 1.1.5
+
+- Added per-moon configs for weed & fox spawning overrides by @emuyia in https://github.com/1A3Dev/LC-YesFox/pull/11
+
+### 1.1.4
+
+- Fixed an exception on v70+
+
 ### 1.1.3
 
 - Fixed the fox not being able to spawn after re-hosting the lobby by @ButteryStancakes in https://github.com/1A3Dev/LC-YesFox/pull/10
