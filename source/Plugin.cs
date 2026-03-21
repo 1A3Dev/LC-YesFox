@@ -556,9 +556,9 @@ namespace YesFox
             WeedEnemySpawnRandom = new System.Random(__instance.playersManager.randomMapSeed + 42);
         }
 
-        [HarmonyPatch(typeof(RoundManager), "AdvanceHourAndSpawnNewBatchOfEnemies")]
-        [HarmonyPrefix]
-        public static void AdvanceHourAndSpawnNewBatchOfEnemies(RoundManager __instance)
+        [HarmonyPatch(typeof(RoundManager), "SpawnEnemiesOutside")]
+        [HarmonyPostfix]
+        public static void SpawnEnemiesOutside(RoundManager __instance)
         {
             if (GameNetworkManager.Instance.gameVersionNum >= 64)
             {
