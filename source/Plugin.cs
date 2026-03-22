@@ -642,30 +642,6 @@ namespace YesFox
                 vehicleController = __instance;
         }
 
-        [HarmonyPatch(typeof(BushWolfEnemy), nameof(BushWolfEnemy.Update))]
-        [HarmonyTranspiler]
-        static IEnumerable<CodeInstruction> CacheVehicleController(IEnumerable<CodeInstruction> instructions)
-        {
-            List<CodeInstruction> codes = instructions.ToList();
-
-            for (int i = 0; i < codes.Count; i++)
-            {
-                if (codes[i].opcode == OpCodes.Call)
-                {
-                    string methodName = codes[i].operand.ToString();
-                    if (methodName.Contains("FindObjectOfType") && methodName.Contains("VehicleController"))
-                    {
-                        codes[i].opcode = OpCodes.Ldsfld;
-                        codes[i].operand = AccessTools.Field(typeof(HarmonyPatches), nameof(vehicleController));
-                        Plugin.StaticLogger.LogDebug($"Use cached VehicleController in Kidnapper Fox AI");
-                        break;
-                    }
-                }
-            }
-
-            return codes;
-        }
-
         static readonly MethodInfo MOLD_SPREAD_MANAGER_INSTANCE = AccessTools.DeclaredPropertyGetter(typeof(HarmonyPatches), nameof(MoldSpreadManager));
         [HarmonyPatch(typeof(GameNetworkManager), nameof(GameNetworkManager.SaveGameValues))]
         [HarmonyPatch(typeof(RoundManager), nameof(RoundManager.LoadNewLevelWait), MethodType.Enumerator)]
@@ -797,6 +773,43 @@ namespace YesFox
             __instance.currentLevel.moldStartPosition = moldStartPosition;
 
             Plugin.StaticLogger.LogDebug($"Applied growth data properly to {__instance.currentLevel.name}");
+        }
+
+        [HarmonyPatch(typeof(BushWolfEnemy), nameof(BushWolfEnemy.Update))]
+        [HarmonyTranspiler]
+        static IEnumerable<CodeInstruction> BushWolfEnemy_Trans_Update(IEnumerable<CodeInstruction> instructions)
+        {
+            List<CodeInstruction> codes = instructions.ToList();
+
+            MethodInfo mathfMax = AccessTools.Method(typeof(Mathf), nameof(Mathf.Max), [ typeof(int), typeof(int) ]);
+            MethodInfo mathfClamp = AccessTools.Method(typeof(Mathf), nameof(Mathf.Clamp), [ typeof(int), typeof(int), typeof(int) ]);
+            FieldInfo livingPlayers = AccessTools.Field(typeof(StartOfRound), nameof(StartOfRound.livingPlayers));
+            for (int i = 0; i < codes.Count; i++)
+            {
+                if (codes[i].opcode == OpCodes.Call)
+                {
+                    string methodName = codes[i].operand.ToString();
+                    if (methodName.Contains("FindObjectOfType") && methodName.Contains("VehicleController"))
+                    {
+                        codes[i].opcode = OpCodes.Ldsfld;
+                        codes[i].operand = AccessTools.Field(typeof(HarmonyPatches), nameof(vehicleController));
+                        Plugin.StaticLogger.LogDebug($"Use cached VehicleController in Kidnapper Fox AI");
+                    }
+                    else
+                    {
+                        MethodInfo methodInfo = codes[i].operand as MethodInfo;
+                        if (methodInfo == mathfMax && codes[i - 1].opcode == OpCodes.Ldc_I4_0 && codes[i - 4].opcode == OpCodes.Ldfld && (FieldInfo)codes[i - 4].operand == livingPlayers)
+                        {
+                            codes[i].operand = mathfClamp;
+                            codes.Insert(i, new(OpCodes.Ldc_I4_3));
+                            i++;
+                            Plugin.StaticLogger.LogDebug($"Clamp livingPlayers-1 between 0 and 3");
+                        }
+                    }
+                }
+            }
+
+            return codes;
         }
     }
 }
