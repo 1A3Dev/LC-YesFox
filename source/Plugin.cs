@@ -793,7 +793,7 @@ namespace YesFox
                     {
                         codes[i].opcode = OpCodes.Ldsfld;
                         codes[i].operand = AccessTools.Field(typeof(HarmonyPatches), nameof(vehicleController));
-                        Plugin.StaticLogger.LogDebug($"Use cached VehicleController in Kidnapper Fox AI");
+                        Plugin.StaticLogger.LogDebug("Use cached VehicleController in Kidnapper Fox AI");
                     }
                     else
                     {
@@ -803,13 +803,42 @@ namespace YesFox
                             codes[i].operand = mathfClamp;
                             codes.Insert(i, new(OpCodes.Ldc_I4_3));
                             i++;
-                            Plugin.StaticLogger.LogDebug($"Clamp livingPlayers-1 between 0 and 3");
+                            Plugin.StaticLogger.LogDebug("Clamp livingPlayers-1 between 0 and 3");
                         }
                     }
                 }
             }
 
             return codes;
+        }
+
+        [HarmonyPatch(typeof(BushWolfEnemy), nameof(BushWolfEnemy.DoAIInterval))]
+        [HarmonyPostfix]
+        static void BushWolfEnemy_Post_DoAIInterval(BushWolfEnemy __instance)
+        {
+            if (__instance.checkPlayer > 3)
+            {
+                // checkPlayer can only be 4+ when a mod has resized the player array
+                // very likely, players with resized lobbies will have empty slots leftover, which unnecessarily slows down the fox's target processing
+                
+                // 50 attempts to skip over empty player slots
+                for (int i = 0; i < 50; i++)
+                {
+                    // a player is connected in this slot
+                    if (__instance.checkPlayer < StartOfRound.Instance.allPlayerScripts.Length && StartOfRound.Instance.allPlayerScripts[__instance.checkPlayer] != null && (StartOfRound.Instance.allPlayerScripts[__instance.checkPlayer].isPlayerControlled || StartOfRound.Instance.allPlayerScripts[__instance.checkPlayer].isPlayerDead))
+                        return;
+
+                    // move to next slot
+                    __instance.checkPlayer++;
+
+                    // wraparound means we're done
+                    if (__instance.checkPlayer >= StartOfRound.Instance.allPlayerScripts.Length)
+                    {
+                        __instance.checkPlayer = 0;
+                        return;
+                    }
+                }
+            }
         }
     }
 }
