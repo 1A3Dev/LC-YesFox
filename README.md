@@ -23,7 +23,7 @@ You can get support in any the following places:
 
 | Mod Version | Game Version | Host Only |
 | ----------- | ------------ | --------- |
-| v1.1.6      | v73          | No        |
+| v1.1.7      | v73          | No        |
 | v1.1.4      | v70 - v72    | No        |
 | v1.1.3      | v60 - v62    | Yes       |
 
