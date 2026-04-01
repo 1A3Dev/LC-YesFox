@@ -23,8 +23,9 @@ You can get support in any the following places:
 
 | Mod Version | Game Version | Host Only |
 | ----------- | ------------ | --------- |
-| v64         | v64 - v73    | No        |
-| v64         | v60 - v62    | Yes       |
+| v1.1.6      | v73          | No        |
+| v1.1.4      | v70 - v72    | No        |
+| v1.1.3      | v60 - v62    | Yes       |
 
 ### Credits
 
