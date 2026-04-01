@@ -19,11 +19,12 @@ You can get support in any the following places:
 - [GitHub Issues](https://github.com/1A3Dev/LC-YesFox/issues)
 - [My Discord Server](https://discord.gg/CKqVFPRtKp)
 
-### Compatibility
+### Latest Versions
 
-- Supported Game Versions:
-  - v64+: Required by all players
-  - v60-v62: Only required by the host
+| Mod Version | Game Version | Host Only |
+| ----------- | ------------ | --------- |
+| v64         | v64          | No        |
+| v64         | v60 - v62    | Yes       |
 
 ### Credits
 
