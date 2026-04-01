@@ -2,6 +2,7 @@
 
 - Update SpawnWeedEnemies() to run closer to its original vanilla timing by @ButteryStancakes in https://github.com/1A3Dev/LC-YesFox/pull/13
 - Fix wrong weed growth values getting written to level saves by @ButteryStancakes in https://github.com/1A3Dev/LC-YesFox/pull/14
+- AI adjustments for player count by @ButteryStancakes in https://github.com/1A3Dev/LC-YesFox/pull/15
 
 ### 1.1.6
 
